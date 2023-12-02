@@ -249,10 +249,10 @@ class KnowledgeGraph:
     
 
 # Save the Knowledge graph
-knowledge_nodes = "/remote_home/PhD_Project/support_files/knowledge_nodes.txt"
-knowledge_nodes_edges = "/remote_home/PhD_Project/support_files/knowledge_nodes_edges.txt"
-knowledge_graph_file = "/remote_home/PhD_Project/data_structures/knowledge_graph.pkl"
-knowledge_graph_folder = "/remote_home/PhD_Project/data_structures/"
+knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/support_files/knowledge_nodes.txt"
+knowledge_nodes_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/support_files/knowledge_nodes_edges.txt"
+knowledge_graph_file = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/knowledge_graph.pkl"
+knowledge_graph_folder = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures"
 # Create a knowledge graph from names.txt and edges.txt files
 kg = KnowledgeGraph(knowledge_nodes, knowledge_nodes_edges)
 
