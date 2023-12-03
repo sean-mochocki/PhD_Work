@@ -198,6 +198,7 @@ class KnowledgeGraph:
             current = stack.pop()
             # If the current node is the end node, return the stack as the path
             if current == end:
+                # stack.append(current)
                 return stack
             # Otherwise, get the list of adjacent nodes of the current node and shuffle it randomly
             adj_nodes = self.nodes[current].edges.copy()
@@ -216,6 +217,8 @@ class KnowledgeGraph:
                     path = self.find_one_random_path(adj_node.number, end, stack_copy, visited_copy)
                     # If the path is not None, return the path
                     if path is not None:
+                        if start not in path:
+                            path.insert(0, start)
                         return path
         # If the stack is empty, return None
         return None

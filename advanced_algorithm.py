@@ -6,6 +6,7 @@ import numpy as np
 import ast
 import time
 import signal
+from operator import itemgetter
 
 # First load the saved knowledge graph
 knowledge_graph_file = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/knowledge_graph.pkl"
@@ -22,7 +23,7 @@ profiles_df = pd.read_csv(os.path.join(data_structures, "profiles.csv"))
 # how this code might not be repeated
 #Define constants for the knowledge graph
 num_kn = 20
-num_kp = 25
+num_kp = 20
 # Define the dataframe to store the experimental data
 experiment_df = pd.DataFrame(columns=["Student Profile id", "Algorithm Time Limit", "KP Length", "LO Length", "KP", "solution", "LP Total Time", "LP Score", "Algorithm Run Time", "Max Time", "Max time per session"])
 # # Specify the data types of the columns using the astype() method
@@ -125,7 +126,6 @@ for student_profile_id in range(len(profiles_df)):
     Zeta = 1
 
     consolidated_score = [Alpha*c + Beta*m + Zeta*f for c, m, f in zip(LO_cognitive_matches, LO_media_match, flipped_score)]
-    knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
 
     # For each student profile we are working with the following data structures
     # consolidated_score is the score of the LOs
@@ -202,3 +202,60 @@ for student_profile_id in range(len(profiles_df)):
     print("Total number of LOs deleted due to time violations: ", + len(time_violation))
     print("Total number of LOs deleted due to knowledge node coverage redundancy", + len(redundant_lo))
 
+    # Identify a set of knowledge paths to search for learning paths
+    knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
+
+    # Assign minimum times to knowledge paths to make sure that all have valid solutions
+
+    # Define a custom key function that returns the score from consolidated_score
+    def get_time(x):
+        return lo_time_taken[x]
+
+    # Sort each sublist of kn_covered_by_lo by the time_taken in ascending order (meaning that fast LOs are first)
+    for sublist in kn_covered_by_lo:
+        sublist.sort(key=get_time, reverse=False)
+
+    # Record the minimum possible time for each knowledge path
+    path_times = []
+    for path in knowledge_path:
+        time = 0
+        for kn in path:
+            time += lo_time_taken[kn_covered_by_lo[kn][0]]
+        path_times.append(time)
+
+    #print("Path times are: ", path_times)
+
+    kp_time_violation = []
+    for index, time in enumerate(path_times):
+        if time > max_time:
+            kp_time_violation.append(index)
+
+    print("Number of knowledge paths with no valid solution: ", len(kp_time_violation))
+
+    # Create a new list with only the elements that are not in kp_time_violation
+    knowledge_path = [sublist for i, sublist in enumerate(knowledge_path) if i not in kp_time_violation]
+    print("Number of knowledge paths of interest: ", len(knowledge_path))
+
+    #Sort the Knowledge Paths according to the highest possible score of their individual elements
+    # Sort each sublist of kn_covered_by_lo by the score in descending order
+    for sublist in kn_covered_by_lo:
+        sublist.sort(key=get_score, reverse=True)
+
+    # Record the maximum possible score for each knowledge path
+    path_max_score = []
+    for path in knowledge_path:
+        score = 0
+        for kn in path:
+            score += consolidated_score[kn_covered_by_lo[kn][0]]
+        path_max_score.append(score)
+
+    zipped = list(zip(path_max_score, knowledge_path))
+
+    sorted_zipped = sorted(zipped, key=itemgetter(0), reverse = True)
+    sorted_path_max_score, sorted_knowledge_path = zip(*sorted_zipped)
+
+    sorted_path_max_score = list(sorted_path_max_score)
+    sorted_knowledge_path = list(sorted_knowledge_path)
+
+    # print(sorted_path_max_score)
+    # print(sorted_knowledge_path)
