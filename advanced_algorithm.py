@@ -181,12 +181,25 @@ for student_profile_id in range(len(profiles_df)):
 
     #print(kn_covered_by_lo)
 
+    # for sublist in kn_covered_by_lo:
+    #     # Set min_time_so_far equal to the first value in the list
+    #     min_time_so_far = lo_time_taken[sublist[0]]
+    #     for lo_index in sublist:
+    #         lo_time = lo_time_taken[lo_index]
+    #         if lo_time > min_time_so_far:
+    #             redundant_lo.append(lo_index)
+    #             min_time_so_far = lo_time
+
     for sublist in kn_covered_by_lo:
         # Set min_time_so_far equal to the first value in the list
         min_time_so_far = lo_time_taken[sublist[0]]
-        for lo_index in sublist:
+        for i, lo_index in enumerate(sublist):
             lo_time = lo_time_taken[lo_index]
-            if lo_time < min_time_so_far:
+            # Skip the first value by checking the index
+            if i == 0:
+                continue
+            # Use >= instead of > for the rest of the values
+            if lo_time >= min_time_so_far:
                 redundant_lo.append(lo_index)
                 min_time_so_far = lo_time
 
@@ -257,5 +270,117 @@ for student_profile_id in range(len(profiles_df)):
     sorted_path_max_score = list(sorted_path_max_score)
     sorted_knowledge_path = list(sorted_knowledge_path)
 
-    # print(sorted_path_max_score)
-    # print(sorted_knowledge_path)
+    print("Max score of kps are: ", sorted_path_max_score)
+    #Create function that performs back-tracking and forward checking COP
+
+    # Call a search algorithm with the best knowledge path found so far
+
+    def check_Max_score(kp, kn_coverage, lo_scores, lo_times, max_time):
+        Best_LP = []
+        time_taken = 0
+        best_score = 0
+        #First check if the maximum score is a valid LP. If so, return that LO
+        for kn in kp:
+            Best_LP.append(kn_coverage[kn][0])
+            time_taken += lo_times[kn_coverage[kn][0]]
+            best_score += lo_scores[kn_coverage[kn][0]]
+        if time_taken <= max_time:
+            print("Best LP is equivalent to maximal score")
+            return Best_LP, time_taken, best_score
+        else:
+            print("Best LP is not equivalent to maximal score")
+            return [], 0, 0
+
+    def Deterministic_COP_Algorithm(kp, kn_coverage, lo_scores, lo_times, max_time):
+        """
+        :param kp: An array of knowledge nodes that need to be covered
+        :param kn_coverage: A list of lists of which LOs covered which knowledge nodes. They are assumed to be sorted in
+        descending order by adaptivity score and time taken
+        :param lo_scores: An array of adaptivity scores for learning objects
+        :param lo_times: An array of times for learning objects
+        :param max_time: an integer values that shows the maximum desired time for a student LP
+        :return: Best LP, time_taken, best_score
+        """
+        Best_LP = []
+        time_taken = 0
+        best_score = 0
+
+        def is_goal(state):
+            """"
+            This function asks if we have identified a valid solution
+            The state is a list of learning objects chosen, the time so far, and the score so far
+            """
+            partial_LP, time_so_far, score_so_far = state[0], state[1], state[2]
+
+            if len(partial_LP) != len(kp):
+                return False
+            if time_so_far > max_time:
+                return False
+
+            return True
+
+        def forward_check(state, action):
+            # Check if the action is consistent with the constraints
+            # The action is a learning object number
+            # The state is a list of selected learning objects
+            # Get the index of the next node to be covered
+            # This is a valid approach, because if the length is 0, 1, or 2, this is the next node to be covered
+            partial_LP, time_so_far, score_so_far = state[0], state[1], state[2]
+
+            next_node = len(partial_LP)
+
+            # Check to see if the LO under consideration covers the next state
+            if action not in kn_coverage[kp[next_node]]:
+                return False
+
+            # Check to see if the move is valid based on the time of the new action
+            total_time = time_so_far + lo_times[action]
+
+            if total_time > max_time:
+                return False
+            return True
+
+        def DFS(Best_LP, time_taken, best_score):
+            stack = []
+            # Put the initial state onto the stack
+            stack.append(([], 0, 0))
+            # The state is a tuple of the LP so far, the time_so_far, and the score_so_far
+
+            while stack:
+                state = stack.pop()
+                if is_goal(state):
+                    if state[2] > best_score:
+                        Best_LP = state[0]
+                        time_taken = state[1]
+                        best_score = state[2]
+                        # print("Time taken: ", time_taken)
+                        continue
+                    continue
+
+                action_index = len(state[0])
+                # Determine the possible actions from the kn_covered_by_lo list of lists
+                # actions is a list of los that cover the next node of interest in the knowledge path
+                actions = list(kn_coverage[kp[action_index]])
+                # Filter out invalid actions
+                actions = [action for action in actions if forward_check(state, action)]
+
+                for action in actions:
+                    new_state = (state[0] + [action], state[1] + lo_times [action], state[2] + lo_scores[action])
+                    stack.append(new_state)
+            return Best_LP, time_taken, best_score
+
+        return DFS(Best_LP, time_taken, best_score)
+
+
+
+    LP, time, score = check_Max_score(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
+
+    if score == 0:
+        print("Run Deterministic COP Algorithm")
+        LP, time, score = Deterministic_COP_Algorithm(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
+
+    print(LP)
+    print(time)
+    print(score)
+
+    #result = Deterministic_COP_Algorithm(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
