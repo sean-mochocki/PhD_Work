@@ -8,13 +8,13 @@ from pycsp3 import ACE
 import ast
 
 # First load the saved knowledge graph
-knowledge_graph_file = "/remote_home/PhD_Project/data_structures/knowledge_graph.pkl"
+knowledge_graph_file = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/knowledge_graph.pkl"
 kg = None
 with open(knowledge_graph_file, "rb") as f:
     kg = pickle.load(f)
 
 # Load the student profile and learning objects data structures into pandas dataframes
-data_structures = "/remote_home/PhD_Project/data_structures"
+data_structures = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures"
 learning_objects_df = pd.read_csv(os.path.join(data_structures, "learning_objects.csv"))
 profiles_df = pd.read_csv(os.path.join(data_structures, "profiles.csv"))
 

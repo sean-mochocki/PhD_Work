@@ -23,11 +23,19 @@ profiles_df = pd.read_csv(os.path.join(data_structures, "profiles.csv"))
 # how this code might not be repeated
 #Define constants for the knowledge graph
 num_kn = 20
-num_kp = 200
+#num_kp = 200
 # Define the dataframe to store the experimental data
-experiment_df = pd.DataFrame(columns=["Student Profile id", "Algorithm Time Limit", "KP Length", "LO Length", "KP", "solution", "LP Total Time", "LP Score", "Algorithm Run Time", "Max Time", "Max time per session"])
-# # Specify the data types of the columns using the astype() method
-# experiment_df = experiment_df.astype({"Student Profile id": int, "KP Indices": list, "LO Indices": list})
+experiment_df = pd.DataFrame(columns=["Student_id", "Best_LP", "Best_AS", "LP_Time", "Alg_time", "Num_KP_Explored", "Num_total_KP"])
+
+# data = {
+#     "Student_id": int(student_profile_id),
+#     "Best_LP": str(LP),
+#     "Best_AS": round(score, 1),
+#     "LP_Time": path_time,
+#     "Alg_time": total_time,
+#     "Num_KP_Explored": int(num_knowledge_paths_explored),
+#     "Num_total_KP:": int(num_kp)
+# }
 
 for student_profile_id in range(len(profiles_df)):
     print("student profile id: ", student_profile_id)
@@ -118,11 +126,12 @@ for student_profile_id in range(len(profiles_df)):
     # Create a list that scores each LO based on the dictionary
     LO_preferredcontent_score = [content_ranking[x] for x in learning_objects_df['Content Type']]
     # Now we need to flip the score to rank preferred content more highly
-    flipped_score = [10 - x for x in LO_preferredcontent_score]
+    flipped_score = [round(((10 - x)*0.1) + 0.1, 1) for x in LO_preferredcontent_score]
+
 
     #Combine these three scores so that they can be combined into the adaptivity_score
-    Alpha = 20
-    Beta = 5
+    Alpha = 1
+    Beta = 1
     Zeta = 1
 
     consolidated_score = [Alpha*c + Beta*m + Zeta*f for c, m, f in zip(LO_cognitive_matches, LO_media_match, flipped_score)]
@@ -142,7 +151,7 @@ for student_profile_id in range(len(profiles_df)):
     for index, lo in enumerate(lo_time_taken):
         if lo >time_per_session: time_violation.append(index)
 
-    lo_time_time = np.delete(lo_time_taken, time_violation)
+    lo_time_taken = np.delete(lo_time_taken, time_violation)
     consolidated_score = np.delete(consolidated_score, time_violation)
     knowledge_nodes_covered = np.delete(knowledge_nodes_covered, time_violation)
 
@@ -216,196 +225,217 @@ for student_profile_id in range(len(profiles_df)):
     print("Total number of LOs deleted due to knowledge node coverage redundancy", + len(redundant_lo))
 
     # Identify a set of knowledge paths to search for learning paths
-    knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
+    for num_kp in range(1, 501):
+        print("number of knowledge paths is: ", num_kp)
+        knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
 
-    # Assign minimum times to knowledge paths to make sure that all have valid solutions
+        # Assign minimum times to knowledge paths to make sure that all have valid solutions
 
-    # Define a custom key function that returns the score from consolidated_score
-    def get_time(x):
-        return lo_time_taken[x]
+        # Define a custom key function that returns the score from consolidated_score
+        def get_time(x):
+            return lo_time_taken[x]
 
-    # Sort each sublist of kn_covered_by_lo by the time_taken in ascending order (meaning that fast LOs are first)
-    for sublist in kn_covered_by_lo:
-        sublist.sort(key=get_time, reverse=False)
+        # Sort each sublist of kn_covered_by_lo by the time_taken in ascending order (meaning that fast LOs are first)
+        for sublist in kn_covered_by_lo:
+            sublist.sort(key=get_time, reverse=False)
 
-    # Record the minimum possible time for each knowledge path
-    path_times = []
-    for path in knowledge_path:
-        time = 0
-        for kn in path:
-            time += lo_time_taken[kn_covered_by_lo[kn][0]]
-        path_times.append(time)
+        # Record the minimum possible time for each knowledge path
+        path_times = []
+        for path in knowledge_path:
+            path_time = 0
+            for kn in path:
+                path_time += lo_time_taken[kn_covered_by_lo[kn][0]]
+            path_times.append(path_time)
 
-    #print("Path times are: ", path_times)
+        #print("Path times are: ", path_times)
 
-    kp_time_violation = []
-    for index, time in enumerate(path_times):
-        if time > max_time:
-            kp_time_violation.append(index)
+        kp_time_violation = []
+        for index, path_time in enumerate(path_times):
+            if path_time > max_time:
+                kp_time_violation.append(index)
 
-    print("Number of knowledge paths with no valid solution: ", len(kp_time_violation))
+        print("Number of knowledge paths with no valid solution: ", len(kp_time_violation))
 
-    # Create a new list with only the elements that are not in kp_time_violation
-    knowledge_path = [sublist for i, sublist in enumerate(knowledge_path) if i not in kp_time_violation]
-    print("Number of knowledge paths of interest: ", len(knowledge_path))
+        # Create a new list with only the elements that are not in kp_time_violation
+        knowledge_path = [sublist for i, sublist in enumerate(knowledge_path) if i not in kp_time_violation]
+        print("Number of knowledge paths of interest: ", len(knowledge_path))
 
-    #Sort the Knowledge Paths according to the highest possible score of their individual elements
-    # Sort each sublist of kn_covered_by_lo by the score in descending order
-    for sublist in kn_covered_by_lo:
-        sublist.sort(key=get_score, reverse=True)
+        #Sort the Knowledge Paths according to the highest possible score of their individual elements
+        # Sort each sublist of kn_covered_by_lo by the score in descending order
+        for sublist in kn_covered_by_lo:
+            sublist.sort(key=get_score, reverse=True)
 
-    # Record the maximum possible score for each knowledge path
-    path_max_score = []
-    for path in knowledge_path:
-        score = 0
-        for kn in path:
-            score += consolidated_score[kn_covered_by_lo[kn][0]]
-        path_max_score.append(score)
+        # Record the maximum possible score for each knowledge path
+        path_max_score = []
+        for path in knowledge_path:
+            score = 0
+            for kn in path:
+                score += consolidated_score[kn_covered_by_lo[kn][0]]
+            path_max_score.append(score)
 
-    zipped = list(zip(path_max_score, knowledge_path))
+        zipped = list(zip(path_max_score, knowledge_path))
 
-    sorted_zipped = sorted(zipped, key=itemgetter(0), reverse = True)
-    sorted_path_max_score, sorted_knowledge_path = zip(*sorted_zipped)
+        sorted_zipped = sorted(zipped, key=itemgetter(0), reverse = True)
+        sorted_path_max_score, sorted_knowledge_path = zip(*sorted_zipped)
 
-    sorted_path_max_score = list(sorted_path_max_score)
-    sorted_knowledge_path = list(sorted_knowledge_path)
+        sorted_path_max_score = list(sorted_path_max_score)
+        sorted_knowledge_path = list(sorted_knowledge_path)
 
-    print("Max score of kps are: ", sorted_path_max_score)
-    #Create function that performs back-tracking and forward checking COP
+        print("Max score of kps are: ", sorted_path_max_score)
+        #Create function that performs back-tracking and forward checking COP
 
-    # Call a search algorithm with the best knowledge path found so far
+        # Call a search algorithm with the best knowledge path found so far
 
-    def check_Max_score(kp, kn_coverage, lo_scores, lo_times, max_time):
-        Best_LP = []
-        time_taken = 0
-        best_score = 0
-        #First check if the maximum score is a valid LP. If so, return that LO
-        for kn in kp:
-            Best_LP.append(kn_coverage[kn][0])
-            time_taken += lo_times[kn_coverage[kn][0]]
-            best_score += lo_scores[kn_coverage[kn][0]]
-        if time_taken <= max_time:
-            print("Best LP is equivalent to maximal score")
-            return Best_LP, time_taken, best_score
-        else:
-            print("Best LP is not equivalent to maximal score")
-            return [], 0, 0
+        def check_Max_score(kp, kn_coverage, lo_scores, lo_times, max_time):
+            Best_LP = []
+            time_taken = 0
+            best_score = 0
+            #First check if the maximum score is a valid LP. If so, return that LO
+            for kn in kp:
+                Best_LP.append(kn_coverage[kn][0])
+                time_taken += lo_times[kn_coverage[kn][0]]
+                best_score += lo_scores[kn_coverage[kn][0]]
+            if time_taken <= max_time:
+                print("Best LP is equivalent to maximal score")
+                return Best_LP, time_taken, best_score
+            else:
+                print("Best LP is not equivalent to maximal score")
+                return [], 0, 0
 
-    def Deterministic_COP_Algorithm(kp, kn_coverage, lo_scores, lo_times, max_time):
-        """
-        :param kp: An array of knowledge nodes that need to be covered
-        :param kn_coverage: A list of lists of which LOs covered which knowledge nodes. They are assumed to be sorted in
-        descending order by adaptivity score and time taken
-        :param lo_scores: An array of adaptivity scores for learning objects
-        :param lo_times: An array of times for learning objects
-        :param max_time: an integer values that shows the maximum desired time for a student LP
-        :return: Best LP, time_taken, best_score
-        """
-        Best_LP = []
-        time_taken = 0
-        best_score = 0
-
-        # As an additional heuristic, calculate the best possible score remaining in the LP
-        max_remaining_score = []
-        total_score = 0
-        total_score = sum([lo_scores[sublist[0]] for sublist in kn_coverage[1:]])
-
-        for i in range(1, len(kn_coverage)):
-            current_score = lo_scores[kn_coverage[i][0]]
-            max_remaining_score.append(total_score - current_score)
-            total_score -= current_score
-
-        def is_goal(state):
-            """"
-            This function asks if we have identified a valid solution
-            The state is a list of learning objects chosen, the time so far, and the score so far
+        def Deterministic_COP_Algorithm(kp, kn_coverage, lo_scores, lo_times, max_time):
             """
-            partial_LP, time_so_far, score_so_far = state[0], state[1], state[2]
+            :param kp: An array of knowledge nodes that need to be covered
+            :param kn_coverage: A list of lists of which LOs covered which knowledge nodes. They are assumed to be sorted in
+            descending order by adaptivity score and time taken
+            :param lo_scores: An array of adaptivity scores for learning objects
+            :param lo_times: An array of times for learning objects
+            :param max_time: an integer values that shows the maximum desired time for a student LP
+            :return: Best LP, time_taken, best_score
+            """
+            Best_LP = []
+            time_taken = 0
+            best_score = 0
 
-            if len(partial_LP) != len(kp):
-                return False
-            if time_so_far > max_time:
-                return False
+            # As an additional heuristic, calculate the best possible score remaining in the LP
+            max_remaining_score = []
+            total_score = 0
+            total_score = sum([lo_scores[sublist[0]] for sublist in kn_coverage[1:]])
 
-            return True
+            for i in range(1, len(kn_coverage)):
+                current_score = lo_scores[kn_coverage[i][0]]
+                max_remaining_score.append(total_score - current_score)
+                total_score -= current_score
 
-        def forward_check(state, action, best_score):
-            # Check if the action is consistent with the constraints
-            # The action is a learning object number
-            # The state is a list of selected learning objects
-            # Get the index of the next node to be covered
-            # This is a valid approach, because if the length is 0, 1, or 2, this is the next node to be covered
-            partial_LP, time_so_far, score_so_far = state[0], state[1], state[2]
+            def is_goal(state):
+                """"
+                This function asks if we have identified a valid solution
+                The state is a list of learning objects chosen, the time so far, and the score so far
+                """
+                partial_LP, time_so_far, score_so_far = state[0], state[1], state[2]
 
-            next_node = len(partial_LP)
-
-            # Check to see if the LO under consideration covers the next state
-            if action not in kn_coverage[kp[next_node]]:
-                return False
-
-            # Check to see if the move is valid based on the time of the new action
-            total_time = time_so_far + lo_times[action]
-
-            if total_time > max_time:
-                return False
-
-
-            # Check to see if the best prospective LP can exceed the best LP discovered so far
-            if partial_LP:
-                best_potential_score = score_so_far + max_remaining_score[len(partial_LP)-1]
-                if best_potential_score <= best_score:
+                if len(partial_LP) != len(kp):
                     return False
-            return True
+                if time_so_far > max_time:
+                    return False
 
-        def DFS(Best_LP, time_taken, best_score):
-            stack = []
-            # Put the initial state onto the stack
-            stack.append(([], 0, 0))
-            # The state is a tuple of the LP so far, the time_so_far, and the score_so_far
+                return True
 
-            while stack:
-                state = stack.pop()
-                if is_goal(state):
-                    if state[2] > best_score:
-                        Best_LP = state[0]
-                        time_taken = state[1]
-                        best_score = state[2]
+            def forward_check(state, action, best_score):
+                # Check if the action is consistent with the constraints
+                # The action is a learning object number
+                # The state is a list of selected learning objects
+                # Get the index of the next node to be covered
+                # This is a valid approach, because if the length is 0, 1, or 2, this is the next node to be covered
+                partial_LP, time_so_far, score_so_far = state[0], state[1], state[2]
+
+                next_node = len(partial_LP)
+
+                # Check to see if the LO under consideration covers the next state
+                if action not in kn_coverage[kp[next_node]]:
+                    return False
+
+                # Check to see if the move is valid based on the time of the new action
+                total_time = time_so_far + lo_times[action]
+
+                if total_time > max_time:
+                    return False
+
+
+                # Check to see if the best prospective LP can exceed the best LP discovered so far
+                if partial_LP:
+                    best_potential_score = score_so_far + max_remaining_score[len(partial_LP)-1]
+                    if best_potential_score <= best_score:
+                        return False
+                return True
+
+            def DFS(Best_LP, time_taken, best_score):
+                stack = []
+                # Put the initial state onto the stack
+                stack.append(([], 0, 0))
+                # The state is a tuple of the LP so far, the time_so_far, and the score_so_far
+
+                while stack:
+                    state = stack.pop()
+                    if is_goal(state):
+                        if state[2] > best_score:
+                            Best_LP = state[0]
+                            time_taken = state[1]
+                            best_score = state[2]
+                            continue
                         continue
-                    continue
 
-                action_index = len(state[0])
-                # Determine the possible actions from the kn_covered_by_lo list of lists
-                # actions is a list of los that cover the next node of interest in the knowledge path
-                actions = list(kn_coverage[kp[action_index]])
-                # Filter out invalid actions
-                actions = [action for action in actions if forward_check(state, action, best_score)]
+                    action_index = len(state[0])
+                    # Determine the possible actions from the kn_covered_by_lo list of lists
+                    # actions is a list of los that cover the next node of interest in the knowledge path
+                    actions = list(kn_coverage[kp[action_index]])
+                    # Filter out invalid actions
+                    actions = [action for action in actions if forward_check(state, action, best_score)]
 
-                for action in actions:
-                    new_state = (state[0] + [action], state[1] + lo_times [action], state[2] + lo_scores[action])
-                    stack.append(new_state)
-            return Best_LP, time_taken, best_score
+                    for action in actions:
+                        new_state = (state[0] + [action], state[1] + lo_times [action], state[2] + lo_scores[action])
+                        stack.append(new_state)
+                return Best_LP, time_taken, round(best_score,1)
 
-        return DFS(Best_LP, time_taken, best_score)
+            return DFS(Best_LP, time_taken, round(best_score,1))
 
-    LP, time, score = check_Max_score(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
+        LP, path_time, score = check_Max_score(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
 
-    # If the score is 0, it means that the best score is not equivalent to the max score
-    #if score == 0:
-    for path, max_score in zip(sorted_knowledge_path, sorted_path_max_score):
-        if score >= max_score:
-            break
-        print("Searching Knowledge path: ", path)
-        print("Run Deterministic COP Algorithm")
-        temp_LP, temp_time, temp_score = Deterministic_COP_Algorithm(path, kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
-        if temp_score > score:
-            score = temp_score
-            LP = temp_LP
-            time = temp_time
-        print("Best score so far is: ", score)
+        # If the score is 0, it means that the best score is not equivalent to the max score
+        #if score == 0:
+        start_time = time.time()
+        num_knowledge_paths_explored = 0
+        for path, max_score in zip(sorted_knowledge_path, sorted_path_max_score):
+            if score >= max_score:
+                break
+            print("Searching Knowledge path: ", path)
+            print("Run Deterministic COP Algorithm")
+            temp_LP, temp_time, temp_score = Deterministic_COP_Algorithm(path, kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
+            if temp_score > score:
+                score = temp_score
+                LP = temp_LP
+                path_time = temp_time
+            print("Best score so far is: ", score)
+            num_knowledge_paths_explored = num_knowledge_paths_explored + 1
 
 
-    print("Best Learning Path is: ", LP)
-    print("The time to complete the best Learning Path is: ", time)
-    print("The adaptivity score of the best learning path is: ", score)
+        total_time = time.time()-start_time
+        print("Best Learning Path is: ", LP)
+        print("The time to complete the best Learning Path is: ", path_time)
+        print("The adaptivity score of the best learning path is: ", round(score,1))
+        print("The total function took: ", total_time, " seconds")
 
+        data = {
+            "Student_id": int(student_profile_id),
+            "Best_LP": str(LP),
+            "Best_AS": round(score, 1),
+            "LP_Time": path_time,
+            "Alg_time": total_time,
+            "Num_KP_Explored": int(num_knowledge_paths_explored),
+            "Num_total_KP": int(num_kp),
+        }
+
+        data = pd.DataFrame(data, index=[0])
+        experiment_df = pd.concat([experiment_df, data], ignore_index=True)
     #result = Deterministic_COP_Algorithm(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
+Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/dfs_experiment.csv"
+experiment_df.to_csv(Experiment)
