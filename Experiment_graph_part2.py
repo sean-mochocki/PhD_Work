@@ -19,34 +19,102 @@ experiment_ACE_df = pd.read_csv(os.path.join(experiment, "ace_data.csv"))
 # Define a list of student ids
 student_ids = [0, 1, 2, 3]
 
-# Loop over the student ids
-for student_id in student_ids:
-    # Define databases for each student
-    experiment_df_student = experiment_df[experiment_df["Student_id"] == student_id]
-    experiment_optimal_df_student = experiment_optimal_df[experiment_optimal_df["Student_id"] == student_id]
-    experiment_ACE_df_student = experiment_ACE_df[experiment_ACE_df["Student_id"] == student_id]
+compare_adaptivity = True
+if compare_adaptivity:
+    # Loop over the student ids
+    for student_id in student_ids:
+        # Define databases for each student
+        experiment_df_student = experiment_df[experiment_df["Student_id"] == student_id]
+        experiment_optimal_df_student = experiment_optimal_df[experiment_optimal_df["Student_id"] == student_id]
+        experiment_ACE_df_student = experiment_ACE_df[experiment_ACE_df["Student_id"] == student_id]
 
-    # Plot the scatterplot with colors and labels by student_id
+        # Plot the scatterplot with colors and labels by student_id
+        for student, group in experiment_df_student.groupby("Student_id"):
+            plt.plot(group["Num_total_KP"], group["Best_AS"], label="Baseline_Algorithm")
+
+        for student, group in experiment_optimal_df_student.groupby("Student_id"):
+            plt.plot(group["Num_total_KP"], group["Best_AS"], label="COP_Algorithm")
+
+        for student, group in experiment_ACE_df_student.groupby("Student_id"):
+            plt.scatter(group["Num_total_KP"], group["Best_AS"], label="ACE v2.1", c="green")
+
+        plt.xlabel("Number of total KPs")
+        plt.ylabel("Optimal Adaptivity Score")
+        plt.title(f"Student {student_id} Optimal Adaptivity Score vs Number of KPs")
+        plt.legend(loc='lower right')
+        # Save plot as image file
+        plt.savefig(data_folder+f"Student_{student_id}_adaptivity_score_vs_numKPs_run4.png")
+        plt.close()
+
+    experiment_df_student = experiment_df[experiment_df["Student_id"] == 4]
     for student, group in experiment_df_student.groupby("Student_id"):
-        plt.plot(group["Num_total_KP"], group["Best_AS"], label="Baseline_Algorithm")
-
-    for student, group in experiment_optimal_df_student.groupby("Student_id"):
-        plt.plot(group["Num_total_KP"], group["Best_AS"], label="COP_Algorithm")
-
-    for student, group in experiment_ACE_df_student.groupby("Student_id"):
-        plt.scatter(group["Num_total_KP"], group["Best_AS"], label="ACE v2.1", c="green")
-
-    plt.xlabel("Number of total KPs")
-    plt.ylabel("Optimal Adaptivity Score")
-    plt.title(f"Student {student_id} Optimal Adaptivity Score vs Number of KPs")
-    plt.legend(bbox_to_anchor=(1.14,0), loc='lower right')
-    # Save plot as image file
-    plt.savefig(data_folder+f"Student_{student_id}_adaptivity_score_vs_numKPs_run4.png")
+        plt.plot(group["Num_total_KP"], group["Best_AS"], label="Local Optimal Score")
+        plt.xlabel("Number of total KPs")
+        plt.ylabel("Optimal Adaptivity Score")
+        plt.title("Student 4 Optimal Adaptivity Score vs Number of KPs")
+        plt.legend(loc='lower right')
+        # Save plot as image file
+    plt.savefig(data_folder+f"Student_4_adaptivity_score_vs_numKPs_run4.png")
     plt.close()
 
+compare_Time = False
+if compare_Time:
+    for student_id in student_ids:
+        experiment_df_student = experiment_df[experiment_df["Student_id"] == student_id]
+        experiment_optimal_df_student = experiment_optimal_df[experiment_optimal_df["Student_id"] == student_id]
+        experiment_ACE_df_student = experiment_ACE_df[experiment_ACE_df["Student_id"] == student_id]
 
+        # Plot the scatterplot with colors and labels by student_id
+        for student, group in experiment_df_student.groupby("Student_id"):
+            plt.plot(group["Num_total_KP"], group["Alg_time"], label="Baseline_Algorithm")
 
+        for student, group in experiment_optimal_df_student.groupby("Student_id"):
+            plt.plot(group["Num_total_KP"], group["Alg_time"], label="COP_Algorithm")
 
+        for student, group in experiment_ACE_df_student.groupby("Student_id"):
+            plt.scatter(group["Num_total_KP"], group["Alg_time"], label="ACE v2.1", c="green")
+
+        plt.xlabel("Number of total KPs")
+        plt.ylabel("Algorithm time to calculate in seconds")
+        plt.title(f"Student {student_id} Algorithm time (s) vs Number of KPs")
+        plt.legend(loc='lower right')
+        # Save plot as image file
+        plt.savefig(data_folder+f"Student_{student_id}_alg_time_vs_numKPs_run4.png")
+        plt.close()
+
+    experiment_df_student = experiment_df[experiment_df["Student_id"] == 4]
+    for student, group in experiment_df_student.groupby("Student_id"):
+        plt.plot(group["Num_total_KP"], group["Alg_time"], label="Algorithm time")
+        plt.xlabel("Number of total KPs")
+        plt.ylabel("Algorithm time to calculate in seconds")
+        plt.title("Student 4 Algorithm time (s) vs Number of KPs")
+        plt.legend(loc='lower right')
+        # Save plot as image file
+    plt.savefig(data_folder+f"Student_4_alg_time_vs_numKPs_run4.png")
+    plt.close()
+
+compare_num_KPs_explored =False
+if compare_num_KPs_explored:
+    for student_id in student_ids:
+        # Define databases for each student
+        experiment_df_student = experiment_df[experiment_df["Student_id"] == student_id]
+        experiment_optimal_df_student = experiment_optimal_df[experiment_optimal_df["Student_id"] == student_id]
+        experiment_ACE_df_student = experiment_ACE_df[experiment_ACE_df["Student_id"] == student_id]
+
+        # Plot the scatterplot with colors and labels by student_id
+        for student, group in experiment_df_student.groupby("Student_id"):
+            plt.plot(group["Num_total_KP"], group["Num_KP_Explored"], label="Baseline_Algorithm")
+
+        for student, group in experiment_optimal_df_student.groupby("Student_id"):
+            plt.plot(group["Num_total_KP"], group["Num_KP_Explored"], label="COP_Algorithm")
+
+        plt.xlabel("Number of total KPs")
+        plt.ylabel("Number of KPs Explored")
+        plt.title(f"Student {student_id} Num KPs Explored vs Number of KPs")
+        plt.legend(loc='lower right')
+        # Save plot as image file
+        plt.savefig(data_folder+f"Student_{student_id}_num_KPs_explored_vs_numKPs_run4.png")
+        plt.close()
 # # Define databases for student 0
 # experiment_df_0 = experiment_df[experiment_df["Student_id"] == 0]
 # experiment_optimal_df_0 = experiment_optimal_df[experiment_optimal_df["Student_id"] == 0]
