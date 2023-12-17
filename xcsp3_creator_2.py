@@ -21,7 +21,7 @@ profiles_df = pd.read_csv(os.path.join(data_structures, "profiles.csv"))
 
 #Define constants for the knowledge graph
 num_kn = 20
-num_kp = 100
+num_kp = 75
 student_profile_id = 3
 
 print("student profile id: ", student_profile_id)

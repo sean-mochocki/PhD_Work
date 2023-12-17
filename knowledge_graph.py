@@ -1,5 +1,6 @@
 import pickle
 import random
+import time
 
 # A class to represent a node in the knowledge graph
 class Node:
@@ -262,6 +263,11 @@ kg = KnowledgeGraph(knowledge_nodes, knowledge_nodes_edges)
 # random_paths = kg.find_random_paths(0,19,100, 42)
 # print(random_paths)
 
+# start_time = time.time()
+# paths = kg.find_unique_paths(0, 19, 20)
+# end_time = time.time()-start_time
+# print("It took: ", end_time, " seconds to calculate the number of paths")
+# print("There are: ", len(paths), " total knowledge paths")
 # path_checker = [0, 6, 2, 7, 12, 8, 19, 17, 13, 6, 3]
 # print(kg.check_if_real_path(path_checker))
 

@@ -37,9 +37,11 @@ experiment_df = pd.DataFrame(columns=["Student_id", "Best_LP", "Best_AS", "LP_Ti
 #     "Num_total_KP:": int(num_kp)
 # }
 
+#for student_profile_id in range (3,4):
 for student_profile_id in range(len(profiles_df)):
     print("student profile id: ", student_profile_id)
-
+    #Change this once done with testing
+    #student_profile_id = 3
     student_start_node = profiles_df["goal1"][student_profile_id]
     student_end_node = profiles_df["goal2"][student_profile_id]
 
@@ -130,9 +132,9 @@ for student_profile_id in range(len(profiles_df)):
 
 
     #Combine these three scores so that they can be combined into the adaptivity_score
-    Alpha = 1
-    Beta = 1
-    Zeta = 1
+    Alpha = 1.0
+    Beta = 1.0
+    Zeta = 1.0
 
     consolidated_score = [Alpha*c + Beta*m + Zeta*f for c, m, f in zip(LO_cognitive_matches, LO_media_match, flipped_score)]
 
@@ -188,17 +190,6 @@ for student_profile_id in range(len(profiles_df)):
     # Next iterate through the sorted kn_covered_by_lo and identify unnecessary LOs
     redundant_lo = []
 
-    #print(kn_covered_by_lo)
-
-    # for sublist in kn_covered_by_lo:
-    #     # Set min_time_so_far equal to the first value in the list
-    #     min_time_so_far = lo_time_taken[sublist[0]]
-    #     for lo_index in sublist:
-    #         lo_time = lo_time_taken[lo_index]
-    #         if lo_time > min_time_so_far:
-    #             redundant_lo.append(lo_index)
-    #             min_time_so_far = lo_time
-
     for sublist in kn_covered_by_lo:
         # Set min_time_so_far equal to the first value in the list
         min_time_so_far = lo_time_taken[sublist[0]]
@@ -226,11 +217,11 @@ for student_profile_id in range(len(profiles_df)):
 
     # Identify a set of knowledge paths to search for learning paths
     for num_kp in range(1, 501):
-        print("number of knowledge paths is: ", num_kp)
+
         knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
-
+        #knowledge_path = kg.find_unique_paths(student_start_node, student_end_node, 20)
         # Assign minimum times to knowledge paths to make sure that all have valid solutions
-
+        start_time = time.time()
         # Define a custom key function that returns the score from consolidated_score
         def get_time(x):
             return lo_time_taken[x]
@@ -268,10 +259,11 @@ for student_profile_id in range(len(profiles_df)):
         # Record the maximum possible score for each knowledge path
         path_max_score = []
         for path in knowledge_path:
-            score = 0
+            score = 0.0
             for kn in path:
                 score += consolidated_score[kn_covered_by_lo[kn][0]]
-            path_max_score.append(score)
+            path_max_score.append(round(score,1))
+            #path_max_score.append(score)
 
         zipped = list(zip(path_max_score, knowledge_path))
 
@@ -288,8 +280,8 @@ for student_profile_id in range(len(profiles_df)):
 
         def check_Max_score(kp, kn_coverage, lo_scores, lo_times, max_time):
             Best_LP = []
-            time_taken = 0
-            best_score = 0
+            time_taken = 0.0
+            best_score = 0.0
             #First check if the maximum score is a valid LP. If so, return that LO
             for kn in kp:
                 Best_LP.append(kn_coverage[kn][0])
@@ -315,16 +307,24 @@ for student_profile_id in range(len(profiles_df)):
             """
             Best_LP = []
             time_taken = 0
-            best_score = 0
+            best_score = 0.0
 
             # As an additional heuristic, calculate the best possible score remaining in the LP
             max_remaining_score = []
             total_score = 0
-            total_score = sum([lo_scores[sublist[0]] for sublist in kn_coverage[1:]])
+            #total_score = sum([lo_scores[sublist[0]] for sublist in kn_coverage])
+            #total_score = sum([lo_scores[sublist[0]] for sublist in kn_coverage[1:]])
+            for kn in kp:
+                total_score += lo_scores[kn_coverage[kn][0]]
 
-            for i in range(1, len(kn_coverage)):
-                current_score = lo_scores[kn_coverage[i][0]]
-                max_remaining_score.append(total_score - current_score)
+            # for i in range(0, len(kp)):
+            #     current_score = lo_scores[kn_coverage[i][0]]
+            #     max_remaining_score.append(round(total_score - current_score,1))
+            #     total_score -= current_score
+
+            for kn in kp:
+                current_score = lo_scores[kn_coverage[kn][0]]
+                max_remaining_score.append(round(total_score - current_score,1))
                 total_score -= current_score
 
             def is_goal(state):
@@ -356,9 +356,9 @@ for student_profile_id in range(len(profiles_df)):
                     return False
 
                 # Check to see if the move is valid based on the time of the new action
-                total_time = time_so_far + lo_times[action]
+                total_time_inside = time_so_far + lo_times[action]
 
-                if total_time > max_time:
+                if total_time_inside > max_time:
                     return False
 
 
@@ -367,12 +367,13 @@ for student_profile_id in range(len(profiles_df)):
                     best_potential_score = score_so_far + max_remaining_score[len(partial_LP)-1]
                     if best_potential_score <= best_score:
                         return False
+
                 return True
 
             def DFS(Best_LP, time_taken, best_score):
                 stack = []
                 # Put the initial state onto the stack
-                stack.append(([], 0, 0))
+                stack.append(([], 0, 0.0))
                 # The state is a tuple of the LP so far, the time_so_far, and the score_so_far
 
                 while stack:
@@ -381,7 +382,7 @@ for student_profile_id in range(len(profiles_df)):
                         if state[2] > best_score:
                             Best_LP = state[0]
                             time_taken = state[1]
-                            best_score = state[2]
+                            best_score = round(state[2],1)
                             continue
                         continue
 
@@ -393,19 +394,22 @@ for student_profile_id in range(len(profiles_df)):
                     actions = [action for action in actions if forward_check(state, action, best_score)]
 
                     for action in actions:
-                        new_state = (state[0] + [action], state[1] + lo_times [action], state[2] + lo_scores[action])
+                        new_state = (state[0] + [action], state[1] + lo_times [action], state[2] + round(lo_scores[action],1))
                         stack.append(new_state)
-                return Best_LP, time_taken, round(best_score,1)
+                #return Best_LP, time_taken, best_score
+                return Best_LP, time_taken, round(best_score, 1)
 
-            return DFS(Best_LP, time_taken, round(best_score,1))
+            #return DFS(Best_LP, time_taken, best_score)
+            return DFS(Best_LP, time_taken, round(best_score, 1))
 
         LP, path_time, score = check_Max_score(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
 
         # If the score is 0, it means that the best score is not equivalent to the max score
         #if score == 0:
-        start_time = time.time()
+
         num_knowledge_paths_explored = 0
         for path, max_score in zip(sorted_knowledge_path, sorted_path_max_score):
+            print("Next max score is: ", max_score)
             if score >= max_score:
                 break
             print("Searching Knowledge path: ", path)
@@ -437,6 +441,6 @@ for student_profile_id in range(len(profiles_df)):
 
         data = pd.DataFrame(data, index=[0])
         experiment_df = pd.concat([experiment_df, data], ignore_index=True)
-    #result = Deterministic_COP_Algorithm(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
-Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/dfs_experiment.csv"
+#result = Deterministic_COP_Algorithm(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
+Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/dfs_experiment_run4.csv"
 experiment_df.to_csv(Experiment)
