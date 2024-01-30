@@ -267,7 +267,9 @@ kg = KnowledgeGraph(knowledge_nodes, knowledge_nodes_edges)
 # filename = input("/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/student_3_all_paths.pkl")
 # with open(filename, "wb") as file:
 #     pickle.dump(paths, file)
-
+all_paths = kg.find_all_paths(0, 19, 20)
+print(all_paths)
+print(len(all_paths))
 # start_time = time.time()
 # paths = kg.find_unique_paths(0, 19, 20)
 # end_time = time.time()-start_time
@@ -276,5 +278,5 @@ kg = KnowledgeGraph(knowledge_nodes, knowledge_nodes_edges)
 # path_checker = [0, 6, 2, 7, 12, 8, 19, 17, 13, 6, 3]
 # print(kg.check_if_real_path(path_checker))
 
-with open(knowledge_graph_file, "wb") as f:
-    pickle.dump(kg, f)
+# with open(knowledge_graph_file, "wb") as f:
+#     pickle.dump(kg, f)

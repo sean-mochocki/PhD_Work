@@ -7,6 +7,8 @@ import ast
 import time
 import signal
 from operator import itemgetter
+import igraph as ig
+
 
 # First load the saved knowledge graph
 knowledge_graph_file = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/knowledge_graph.pkl"
@@ -222,6 +224,7 @@ for student_profile_id in range(1):
 
         #knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
         knowledge_path = kg.find_unique_paths(student_start_node, student_end_node, 20)
+
         # Assign minimum times to knowledge paths to make sure that all have valid solutions
         start_time = time.time()
         # Define a custom key function that returns the score from consolidated_score
