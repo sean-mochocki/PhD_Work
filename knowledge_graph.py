@@ -263,6 +263,11 @@ kg = KnowledgeGraph(knowledge_nodes, knowledge_nodes_edges)
 # random_paths = kg.find_random_paths(0,19,100, 42)
 # print(random_paths)
 
+# paths = kg.find_unique_paths(0, 18, 20)
+# filename = input("/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/student_3_all_paths.pkl")
+# with open(filename, "wb") as file:
+#     pickle.dump(paths, file)
+
 # start_time = time.time()
 # paths = kg.find_unique_paths(0, 19, 20)
 # end_time = time.time()-start_time

@@ -7,9 +7,11 @@ import ast
 import time
 import signal
 from operator import itemgetter
+import pickle
 
 # First load the saved knowledge graph
 knowledge_graph_file = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/knowledge_graph.pkl"
+file_path= "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/"
 kg = None
 with open(knowledge_graph_file, "rb") as f:
     kg = pickle.load(f)
@@ -37,9 +39,12 @@ experiment_df = pd.DataFrame(columns=["Student_id", "Best_LP", "Best_AS", "LP_Ti
 #     "Num_total_KP:": int(num_kp)
 # }
 
-for student_profile_id in range(len(profiles_df)):
+#for student_profile_id in range (3,4):
+profiles = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+for student_profile_id in profiles:
     print("student profile id: ", student_profile_id)
-
+    #Change this once done with testing
+    #student_profile_id = 3
     student_start_node = profiles_df["goal1"][student_profile_id]
     student_end_node = profiles_df["goal2"][student_profile_id]
 
@@ -130,9 +135,9 @@ for student_profile_id in range(len(profiles_df)):
 
 
     #Combine these three scores so that they can be combined into the adaptivity_score
-    Alpha = 1
-    Beta = 1
-    Zeta = 1
+    Alpha = 1.0
+    Beta = 1.0
+    Zeta = 1.0
 
     consolidated_score = [Alpha*c + Beta*m + Zeta*f for c, m, f in zip(LO_cognitive_matches, LO_media_match, flipped_score)]
 
@@ -213,124 +218,68 @@ for student_profile_id in range(len(profiles_df)):
     print("Total number of LOs deleted due to time violations: ", + len(time_violation))
     print("Total number of LOs deleted due to knowledge node coverage redundancy", + len(redundant_lo))
 
-    # Identify a set of knowledge paths to search for learning paths
-    #for num_kp in range(500, 501):
-    #print("number of knowledge paths is: ", num_kp)
-    #knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
-    knowledge_path = kg.find_unique_paths(student_start_node, student_end_node, 20)
-    num_kp = len(knowledge_path)
-    print("Total number of knowledge paths is: ", num_kp)
-    # Assign minimum times to knowledge paths to make sure that all have valid solutions
-
-    # Define a custom key function that returns the score from consolidated_score
-    def get_time(x):
-        return lo_time_taken[x]
-
-    # Sort each sublist of kn_covered_by_lo by the time_taken in ascending order (meaning that fast LOs are first)
-    for sublist in kn_covered_by_lo:
-        sublist.sort(key=get_time, reverse=False)
-
-    # Record the minimum possible time for each knowledge path
-    path_times = []
-    for path in knowledge_path:
-        path_time = 0
-        for kn in path:
-            path_time += lo_time_taken[kn_covered_by_lo[kn][0]]
-        path_times.append(path_time)
-
-    #print("Path times are: ", path_times)
-
-    kp_time_violation = []
-    for index, path_time in enumerate(path_times):
-        if path_time > max_time:
-            kp_time_violation.append(index)
-
-    print("Number of knowledge paths with no valid solution: ", len(kp_time_violation))
-
-    # Create a new list with only the elements that are not in kp_time_violation
-    knowledge_path = [sublist for i, sublist in enumerate(knowledge_path) if i not in kp_time_violation]
-    print("Number of knowledge paths of interest: ", len(knowledge_path))
-
-    #Sort the Knowledge Paths according to the highest possible score of their individual elements
-    # Sort each sublist of kn_covered_by_lo by the score in descending order
-    for sublist in kn_covered_by_lo:
-        sublist.sort(key=get_score, reverse=True)
-
-    # Record the maximum possible score for each knowledge path
-    path_max_score = []
-    for path in knowledge_path:
-        score = 0
-        for kn in path:
-            score += consolidated_score[kn_covered_by_lo[kn][0]]
-        path_max_score.append(score)
-
-    zipped = list(zip(path_max_score, knowledge_path))
-
-    sorted_zipped = sorted(zipped, key=itemgetter(0), reverse = True)
-    sorted_path_max_score, sorted_knowledge_path = zip(*sorted_zipped)
-
-    sorted_path_max_score = list(sorted_path_max_score)
-    sorted_knowledge_path = list(sorted_knowledge_path)
-
-    print("Max score of kps are: ", sorted_path_max_score)
-    #Create function that performs back-tracking and forward checking COP
-
-    # Call a search algorithm with the best knowledge path found so far
-
-    def check_Max_score(kp, kn_coverage, lo_scores, lo_times, max_time):
-        Best_LP = []
-        time_taken = 0
-        best_score = 0
-        #First check if the maximum score is a valid LP. If so, return that LO
-        for kn in kp:
-            Best_LP.append(kn_coverage[kn][0])
-            time_taken += lo_times[kn_coverage[kn][0]]
-            best_score += lo_scores[kn_coverage[kn][0]]
-        if time_taken <= max_time:
-            print("Best LP is equivalent to maximal score")
-            return Best_LP, time_taken, best_score
-        else:
-            print("Best LP is not equivalent to maximal score")
-            return [], 0, 0
-
-    #Start searching for knowledge paths
-
-    start_time = time.time()
-    num_knowledge_paths_explored = 0
-
-    best_learning_path = None
-    learning_path_time = None
-    learning_path_score = None
-
-    for path_candidate in sorted_knowledge_path:
-        num_knowledge_paths_explored += 1
-        LP, path_time, score = check_Max_score(path_candidate, kn_covered_by_lo, consolidated_score,
-                                               lo_time_taken, max_time)
-        if score != 0:
-            best_learning_path = LP
-            learning_path_time = path_time
-            learning_path_score = score
-            break
-
-
-    total_time = time.time()-start_time
-    print("Best Learning Path is: ", best_learning_path)
-    print("The time to complete the best Learning Path is: ", learning_path_time)
-    print("The adaptivity score of the best learning path is: ", round(learning_path_score,1))
-    print("The total function took: ", total_time, " seconds")
-
-    data = {
-        "Student_id": int(student_profile_id),
-        "Best_LP": str(best_learning_path),
-        "Best_AS": round(learning_path_score, 1),
-        "LP_Time": learning_path_time,
-        "Alg_time": total_time,
-        "Num_KP_Explored": int(num_knowledge_paths_explored),
-        "Num_total_KP": int(num_kp),
-    }
-
-    data = pd.DataFrame(data, index=[0])
-    experiment_df = pd.concat([experiment_df, data], ignore_index=True)
-    #result = Deterministic_COP_Algorithm(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
-Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/allpaths_experiment_baseline.csv"
-experiment_df.to_csv(Experiment)
+    # knowledge_path = kg.find_unique_paths(student_start_node, student_end_node, 20)
+    # # Assign minimum times to knowledge paths to make sure that all have valid solutions
+    # start_time = time.time()
+    #
+    #
+    # # Define a custom key function that returns the score from consolidated_score
+    # def get_time(x):
+    #     return lo_time_taken[x]
+    #
+    #
+    # # Sort each sublist of kn_covered_by_lo by the time_taken in ascending order (meaning that fast LOs are first)
+    # for sublist in kn_covered_by_lo:
+    #     sublist.sort(key=get_time, reverse=False)
+    #
+    # # Record the minimum possible time for each knowledge path
+    # path_times = []
+    # for path in knowledge_path:
+    #     path_time = 0
+    #     for kn in path:
+    #         path_time += lo_time_taken[kn_covered_by_lo[kn][0]]
+    #     path_times.append(path_time)
+    #
+    # # print("Path times are: ", path_times)
+    #
+    # kp_time_violation = []
+    # for index, path_time in enumerate(path_times):
+    #     if path_time > max_time:
+    #         kp_time_violation.append(index)
+    #
+    # print("Number of knowledge paths with no valid solution: ", len(kp_time_violation))
+    #
+    # # Create a new list with only the elements that are not in kp_time_violation
+    # knowledge_path = [sublist for i, sublist in enumerate(knowledge_path) if i not in kp_time_violation]
+    # print("Number of knowledge paths of interest: ", len(knowledge_path))
+    #
+    # # Sort the Knowledge Paths according to the highest possible score of their individual elements
+    # # Sort each sublist of kn_covered_by_lo by the score in descending order
+    # for sublist in kn_covered_by_lo:
+    #     sublist.sort(key=get_score, reverse=True)
+    #
+    # # Record the maximum possible score for each knowledge path
+    # path_max_score = []
+    # for path in knowledge_path:
+    #     score = 0.0
+    #     for kn in path:
+    #         score += consolidated_score[kn_covered_by_lo[kn][0]]
+    #     path_max_score.append(round(score, 1))
+    #     # path_max_score.append(score)
+    #
+    # zipped = list(zip(path_max_score, knowledge_path))
+    #
+    # sorted_zipped = sorted(zipped, key=itemgetter(0), reverse=True)
+    # sorted_path_max_score, sorted_knowledge_path = zip(*sorted_zipped)
+    #
+    # sorted_path_max_score = list(sorted_path_max_score)
+    # sorted_knowledge_path = list(sorted_knowledge_path)
+    #
+    # #print("Max score of kps are: ", sorted_path_max_score)
+    #
+    # sorted_knowledge_path = sorted_knowledge_path[0:200]
+    # filename = file_path + "student_profile_" + str(student_profile_id) +"_top_200_KPs.pkl"
+    #
+    #
+    # with open(filename, "wb") as file:
+    #     pickle.dump(sorted_knowledge_path, file)

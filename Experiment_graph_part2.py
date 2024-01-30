@@ -19,7 +19,7 @@ experiment_ACE_df = pd.read_csv(os.path.join(experiment, "ace_data.csv"))
 # Define a list of student ids
 student_ids = [0, 1, 2, 3]
 
-compare_adaptivity = True
+compare_adaptivity = False
 if compare_adaptivity:
     # Loop over the student ids
     for student_id in student_ids:
@@ -57,7 +57,10 @@ if compare_adaptivity:
     plt.savefig(data_folder+f"Student_4_adaptivity_score_vs_numKPs_run4.png")
     plt.close()
 
-compare_Time = False
+# Define a list of student ids
+student_ids = [0, 1, 2, 3]
+
+compare_Time = True
 if compare_Time:
     for student_id in student_ids:
         experiment_df_student = experiment_df[experiment_df["Student_id"] == student_id]
@@ -77,21 +80,21 @@ if compare_Time:
         plt.xlabel("Number of total KPs")
         plt.ylabel("Algorithm time to calculate in seconds")
         plt.title(f"Student {student_id} Algorithm time (s) vs Number of KPs")
-        plt.legend(loc='lower right')
+        plt.legend(loc='upper right')
         # Save plot as image file
         plt.savefig(data_folder+f"Student_{student_id}_alg_time_vs_numKPs_run4.png")
         plt.close()
 
-    experiment_df_student = experiment_df[experiment_df["Student_id"] == 4]
-    for student, group in experiment_df_student.groupby("Student_id"):
-        plt.plot(group["Num_total_KP"], group["Alg_time"], label="Algorithm time")
-        plt.xlabel("Number of total KPs")
-        plt.ylabel("Algorithm time to calculate in seconds")
-        plt.title("Student 4 Algorithm time (s) vs Number of KPs")
-        plt.legend(loc='lower right')
-        # Save plot as image file
-    plt.savefig(data_folder+f"Student_4_alg_time_vs_numKPs_run4.png")
-    plt.close()
+    # experiment_df_student = experiment_df[experiment_df["Student_id"] == 4]
+    # for student, group in experiment_df_student.groupby("Student_id"):
+    #     plt.plot(group["Num_total_KP"], group["Alg_time"], label="Algorithm time")
+    #     plt.xlabel("Number of total KPs")
+    #     plt.ylabel("Algorithm time to calculate in seconds")
+    #     plt.title("Student 4 Algorithm time (s) vs Number of KPs")
+    #     plt.legend(loc='lower right')
+    #     # Save plot as image file
+    # plt.savefig(data_folder+f"Student_4_alg_time_vs_numKPs_run4.png")
+    # plt.close()
 
 compare_num_KPs_explored =False
 if compare_num_KPs_explored:

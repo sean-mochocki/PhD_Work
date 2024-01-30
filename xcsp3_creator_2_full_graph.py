@@ -1,4 +1,6 @@
 import pickle
+from xml.dom.minidom import Element
+
 import pandas as pd
 from knowledge_graph import KnowledgeGraph
 import os
@@ -17,12 +19,12 @@ with open(knowledge_graph_file, "rb") as f:
 # Load the student profile and learning objects data structures into pandas dataframes
 data_structures = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/"
 learning_objects_df = pd.read_csv(os.path.join(data_structures, "learning_objects.csv"))
-profiles_df = pd.read_csv(os.path.join(data_structures, "consolidated_profiles.csv"))
+profiles_df = pd.read_csv(os.path.join(data_structures, "profiles.csv"))
 
 #Define constants for the knowledge graph
 num_kn = 20
-num_kp = 1
-student_profile_id = 8
+#num_kp = 75
+student_profile_id = 4
 
 print("student profile id: ", student_profile_id)
 
@@ -181,17 +183,6 @@ for sublist in kn_covered_by_lo:
 # Next iterate through the sorted kn_covered_by_lo and identify unnecessary LOs
 redundant_lo = []
 
-# print(kn_covered_by_lo)
-
-# for sublist in kn_covered_by_lo:
-#     # Set min_time_so_far equal to the first value in the list
-#     min_time_so_far = lo_time_taken[sublist[0]]
-#     for lo_index in sublist:
-#         lo_time = lo_time_taken[lo_index]
-#         if lo_time > min_time_so_far:
-#             redundant_lo.append(lo_index)
-#             min_time_so_far = lo_time
-
 for sublist in kn_covered_by_lo:
     # Set min_time_so_far equal to the first value in the list
     min_time_so_far = lo_time_taken[sublist[0]]
@@ -217,106 +208,56 @@ print("Total number of LOs under consideration: ", len(lo_time_taken))
 print("Total number of LOs deleted due to time violations: ", + len(time_violation))
 print("Total number of LOs deleted due to knowledge node coverage redundancy", + len(redundant_lo))
 
-#print("number of knowledge paths is: ", num_kp)
-#knowledge_path = kg.find_random_paths(student_start_node, student_end_node, 20, 42)
-#knowledge_path = kg.find_unique_paths(student_start_node, student_end_node, 20)
-# # Assign minimum times to knowledge paths to make sure that all have valid solutions
-#
-# # Define a custom key function that returns the score from consolidated_score
-# def get_time(x):
-#     return lo_time_taken[x]
-#
-# # Sort each sublist of kn_covered_by_lo by the time_taken in ascending order (meaning that fast LOs are first)
-# for sublist in kn_covered_by_lo:
-#     sublist.sort(key=get_time, reverse=False)
-#
-# # Record the minimum possible time for each knowledge path
-# path_times = []
-# for path in knowledge_path:
-#     path_time = 0
-#     for kn in path:
-#         path_time += lo_time_taken[kn_covered_by_lo[kn][0]]
-#     path_times.append(path_time)
-#
-# #print("Path times are: ", path_times)
-#
-# kp_time_violation = []
-# for index, path_time in enumerate(path_times):
-#     if path_time > max_time:
-#         kp_time_violation.append(index)
-#
-# print("Number of knowledge paths with no valid solution: ", len(kp_time_violation))
-#
-# # Create a new list with only the elements that are not in kp_time_violation
-# knowledge_path = [sublist for i, sublist in enumerate(knowledge_path) if i not in kp_time_violation]
-# print("Number of knowledge paths of interest: ", len(knowledge_path))
-#
-# #Sort the Knowledge Paths according to the highest possible score of their individual elements
-# # Sort each sublist of kn_covered_by_lo by the score in descending order
-# for sublist in kn_covered_by_lo:
-#     sublist.sort(key=get_score, reverse=True)
-#
-# # Record the maximum possible score for each knowledge path
-# path_max_score = []
-# for path in knowledge_path:
-#     score = 0
-#     for kn in path:
-#         score += consolidated_score[kn_covered_by_lo[kn][0]]
-#     path_max_score.append(score)
-#
-# zipped = list(zip(path_max_score, knowledge_path))
-#
-# sorted_zipped = sorted(zipped, key=itemgetter(0), reverse = True)
-# sorted_path_max_score, sorted_knowledge_path = zip(*sorted_zipped)
-#
-# sorted_path_max_score = list(sorted_path_max_score)
-# sorted_knowledge_path = list(sorted_knowledge_path)
-#
-# print("Max score of kps are: ", sorted_path_max_score)
-# #Create function that performs back-tracking and forward checking COP
-#
-# # Call a search algorithm with the best knowledge path found so far
-#
-# def check_Max_score(kp, kn_coverage, lo_scores, lo_times, max_time):
-#     Best_LP = []
-#     time_taken = 0
-#     best_score = 0
-#     #First check if the maximum score is a valid LP. If so, return that LO
-#     for kn in kp:
-#         Best_LP.append(kn_coverage[kn][0])
-#         time_taken += lo_times[kn_coverage[kn][0]]
-#         best_score += lo_scores[kn_coverage[kn][0]]
-#     if time_taken <= max_time:
-#         print("Best LP is equivalent to maximal score")
-#         return Best_LP, time_taken, best_score
-#     else:
-#         print("Best LP is not equivalent to maximal score")
-#         return [], 0, 0
-sorted_knowledge_path_file = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures/student_profile_" + str(student_profile_id) + "_top_200_KPs.pkl"
-sorted_knowledge_path = None
-with open(sorted_knowledge_path_file, "rb") as f:
-    sorted_knowledge_path = pickle.load(f)
+# Assign minimum times to knowledge paths to make sure that all have valid solutions
 
-# Delete all elements of sorted knowledge path except for first. This is the one that will be encoded
-sorted_knowledge_path = sorted_knowledge_path[0:10]
+# Define a custom key function that returns the score from consolidated_score
+def get_time(x):
+    return lo_time_taken[x]
+
+# Sort each sublist of kn_covered_by_lo by the time_taken in ascending order (meaning that fast LOs are first)
+for sublist in kn_covered_by_lo:
+    sublist.sort(key=get_time, reverse=False)
+
+
+#Sort the Knowledge Paths according to the highest possible score of their individual elements
+# Sort each sublist of kn_covered_by_lo by the score in descending order
+for sublist in kn_covered_by_lo:
+    sublist.sort(key=get_score, reverse=True)
+
+graph_text_file="/home/sean/Desktop/PhD_Work/PhD_Work/support_files/knowledge_nodes_edges.txt"
+graph = [] # graph[i] is the list of nodes connected to node i
+with open(graph_text_file) as f:
+    for line in f:
+        node, edges = line.split(":")
+        graph.append([int(e) for e in edges.split(",")])
 
 #All necessary variables for XCSP3 are defined, begin creating XCSP3 file
 # Create a variable that defines the knowledge nodes to be covered
 kn = VarArray(size=num_kn, dom={0,1})
+
+#The student start node must be included in the solution
+satisfy(kn[student_start_node]==1)
+#The student end node must be included in the solution
+satisfy(kn[student_end_node]==1)
+# # Define the requirement that if any node is included, one of the subsequent nodes must also be included, unless
+# # the included node is the end node
+# for i in range (len(graph)):
+#     if i != student_end_node:
+#         satisfy(If(kn[graph[i]]==1, Then=disjunction([kn[graph[i][j]] for j in range(len(graph[i]))])))
+
+
+
 # Create a variable that defines the available Learning Objects
 lo = VarArray(size = len(lo_time_taken), dom={0,1})
 # Create a variable that defines the knowledge paths available
-kp = VarArray(size=[len(sorted_knowledge_path)], dom = {0,1})
-satisfy (sum(kp) == 1)
+#kp = VarArray(size=[len(sorted_knowledge_path)], dom = {0,1})
+#satisfy (sum(kp) == 1)
 
 # # If a given knowledge path is chosen, this implies that the associated knowledge nodes are chosen
-satisfy(*(imply(kp[i] == 1, kn[sorted_knowledge_path[i][j]] == 1) for i in range(len(kp)) for j in range(len(sorted_knowledge_path[i]))))
+#satisfy(*(imply(kp[i] == 1, kn[sorted_knowledge_path[i][j]] == 1) for i in range(len(kp)) for j in range(len(sorted_knowledge_path[i]))))
 
 # If a given knowledge path is chosen, this implies that the knowledge nodes not associated with the knowledge path are not chosen
-if len(sorted_knowledge_path[0]) != num_kn:
-   satisfy(*(imply(kp[i] == 1, conjunction(kn[j] == 0 for j in range(num_kn) if j not in sorted_knowledge_path[i])) for i in range(len(kp))))
-else:
-    satisfy(*(imply(kp[i] == 1, conjunction(kn[j] == 0 for j in range(num_kn) if j not in sorted_knowledge_path[i])) for i in range(1, len(kp))))
+#satisfy(*(imply(kp[i] == 1, conjunction(kn[j] == 0 for j in range(num_kn) if j not in sorted_knowledge_path[i])) for i in range(len(kp))))
 
 # This line creates a disjunction for every knowledge node, if it is 1, then one of the LOs that cover it must be 1
 for i in range(len(kn)): satisfy(If(kn[i]==1, Then=disjunction([lo[kn_covered_by_lo[i][j]] for j in range(len(kn_covered_by_lo[i]))]), Else=kn[i]==0))

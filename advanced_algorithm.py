@@ -17,7 +17,7 @@ with open(knowledge_graph_file, "rb") as f:
 # Load the student profile and learning objects data structures into pandas dataframes
 data_structures = "/home/sean/Desktop/PhD_Work/PhD_Work/data_structures"
 learning_objects_df = pd.read_csv(os.path.join(data_structures, "learning_objects.csv"))
-profiles_df = pd.read_csv(os.path.join(data_structures, "profiles.csv"))
+profiles_df = pd.read_csv(os.path.join(data_structures, "consolidated_profiles.csv"))
 
 # Note, this section is copied from xcsp3_creator. This indicates refactoring, thought should be put into
 # how this code might not be repeated
@@ -38,7 +38,9 @@ experiment_df = pd.DataFrame(columns=["Student_id", "Best_LP", "Best_AS", "LP_Ti
 # }
 
 #for student_profile_id in range (3,4):
-for student_profile_id in range(len(profiles_df)):
+#for student_profile_id in range(len(profiles_df)):
+for student_profile_id in range(1):
+    student_profile_id = 11
     print("student profile id: ", student_profile_id)
     #Change this once done with testing
     #student_profile_id = 3
@@ -216,10 +218,10 @@ for student_profile_id in range(len(profiles_df)):
     print("Total number of LOs deleted due to knowledge node coverage redundancy", + len(redundant_lo))
 
     # Identify a set of knowledge paths to search for learning paths
-    for num_kp in range(1, 501):
+    for num_kp in range(100, 101):
 
-        knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
-        #knowledge_path = kg.find_unique_paths(student_start_node, student_end_node, 20)
+        #knowledge_path = kg.find_random_paths(student_start_node, student_end_node, num_kp, 42)
+        knowledge_path = kg.find_unique_paths(student_start_node, student_end_node, 20)
         # Assign minimum times to knowledge paths to make sure that all have valid solutions
         start_time = time.time()
         # Define a custom key function that returns the score from consolidated_score
@@ -294,7 +296,7 @@ for student_profile_id in range(len(profiles_df)):
                 print("Best LP is not equivalent to maximal score")
                 return [], 0, 0
 
-        def Deterministic_COP_Algorithm(kp, kn_coverage, lo_scores, lo_times, max_time):
+        def Deterministic_COP_Algorithm(kp, kn_coverage, lo_scores, lo_times, max_time, max_global_score_so_far = 0):
             """
             :param kp: An array of knowledge nodes that need to be covered
             :param kn_coverage: A list of lists of which LOs covered which knowledge nodes. They are assumed to be sorted in
@@ -365,6 +367,8 @@ for student_profile_id in range(len(profiles_df)):
                 # Check to see if the best prospective LP can exceed the best LP discovered so far (locally and globally)
                 if partial_LP:
                     best_potential_score = score_so_far + max_remaining_score[len(partial_LP)-1]
+                    if best_potential_score <= max_global_score_so_far:
+                        return False
                     if best_potential_score <= best_score:
                         return False
 
@@ -414,7 +418,7 @@ for student_profile_id in range(len(profiles_df)):
                 break
             print("Searching Knowledge path: ", path)
             print("Run Deterministic COP Algorithm")
-            temp_LP, temp_time, temp_score = Deterministic_COP_Algorithm(path, kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
+            temp_LP, temp_time, temp_score = Deterministic_COP_Algorithm(path, kn_covered_by_lo, consolidated_score, lo_time_taken, max_time, score)
             if temp_score > score:
                 score = temp_score
                 LP = temp_LP
@@ -442,5 +446,5 @@ for student_profile_id in range(len(profiles_df)):
         data = pd.DataFrame(data, index=[0])
         experiment_df = pd.concat([experiment_df, data], ignore_index=True)
 #result = Deterministic_COP_Algorithm(sorted_knowledge_path[0], kn_covered_by_lo, consolidated_score, lo_time_taken, max_time)
-Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/dfs_experiment_run4.csv"
+Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/dfs_experiment_consolidated_profile_student_11.csv"
 experiment_df.to_csv(Experiment)
