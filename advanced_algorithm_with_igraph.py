@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 import igraph as ig
 import pandas as pd
 import os
@@ -5,6 +7,9 @@ import numpy as np
 import ast
 import time
 from operator import itemgetter
+
+#from google.protobuf.struct_pb2 import NULL_VALUE
+from tensorflow.python.framework.test_ops import none_eager_fallback
 
 knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/support_files/knowledge_nodes_without_commas.txt"
 knowledge_nodes_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/support_files/knowledge_nodes_edges_igraph.txt"
@@ -29,6 +34,8 @@ profiles_df = pd.read_csv(os.path.join(data_structures, "consolidated_profiles.c
 experiment_df = pd.DataFrame(columns=["Student_id", "Best_LP", "Best_AS", "LP_Time", "Alg_time", "Num_KP_Explored", "Num_total_KP"])
 
 for student_profile_id in range(len(profiles_df)):
+#for student_profile_id in range(1):
+    #student_profile_id = 11
     print("student profile id: ", student_profile_id)
     # Change this once done with testing
     # student_profile_id = 3
@@ -37,6 +44,11 @@ for student_profile_id in range(len(profiles_df)):
 
     # Pull values off of the first user profile
     max_time = int(profiles_df['max_time'][student_profile_id]) * 100
+
+    # Test code, delete after
+    #max_time = 1100
+    #print("Fake Max Time is: ", max_time)
+
     time_per_session = int(profiles_df['time_per_session'][student_profile_id]) * 100
 
     # Get the first element of the column as a string
@@ -62,7 +74,8 @@ for student_profile_id in range(len(profiles_df)):
 
     # Capture the learning object variables of interest
     LO_difficulty = learning_objects_df['Knowledge Density (Subjective)']
-
+    LO_titles = learning_objects_df['Title']
+    LO_concepts = learning_objects_df['Concept']
 
     # Define a function that maps strings to integers
     def difficulty_to_int(difficulty):
@@ -149,6 +162,8 @@ for student_profile_id in range(len(profiles_df)):
     lo_time_taken = np.delete(lo_time_taken, time_violation)
     consolidated_score = np.delete(consolidated_score, time_violation)
     knowledge_nodes_covered = np.delete(knowledge_nodes_covered, time_violation)
+    LO_titles = np.delete(LO_titles, time_violation)
+    LO_concepts = np.delete(LO_concepts, time_violation)
 
 
     # Define a function to identify the LOs covered by each knowledge node
@@ -205,6 +220,8 @@ for student_profile_id in range(len(profiles_df)):
     lo_time_taken = np.delete(lo_time_taken, redundant_lo)
     consolidated_score = np.delete(consolidated_score, redundant_lo)
     knowledge_nodes_covered = np.delete(knowledge_nodes_covered, redundant_lo)
+    LO_titles = np.delete(LO_titles, redundant_lo)
+    LO_concepts = np.delete(LO_concepts, redundant_lo)
     # Recalculate the knowledge nodes covered by LOs
     kn_covered_by_lo = return_kn_covered_by_lo(num_kn, knowledge_nodes_covered)
 
@@ -452,6 +469,9 @@ for student_profile_id in range(len(profiles_df)):
     print("The adaptivity score of the best learning path is: ", round(score, 1))
     print("The total function took: ", total_time, " seconds")
 
+    learning_path_titles = [LO_titles[i] for i in LP]
+    learning_path_concepts = [LO_concepts[i] for i in LP]
+
     data = {
         "Student_id": int(student_profile_id),
         "Best_LP": str(LP),
@@ -460,10 +480,12 @@ for student_profile_id in range(len(profiles_df)):
         "Alg_time": total_time,
         "Num_KP_Explored": int(num_knowledge_paths_explored),
         "Num_total_KP": int(num_kp),
+        "Learning_path_titles": str(learning_path_titles),
+        "Learning_path_concepts": str(learning_path_concepts)
     }
 
     data = pd.DataFrame(data, index=[0])
     experiment_df = pd.concat([experiment_df, data], ignore_index=True)
 
-Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/dfs_experiment_consolidated_profile_student_with_igraph.csv"
+Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Experiment/LP_Experiment_Synthetic_Data.csv"
 experiment_df.to_csv(Experiment)
