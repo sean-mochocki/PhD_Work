@@ -34,18 +34,25 @@ KG.add_edges(edges)
 #print(KG)
 # Create the set of LMs from the file
 LM_database = pd.read_excel(learning_materials)
-#LM_database['Avolve Keywords'] = LM_database['Avolve Keywords'].apply(lambda x: ast.literal_eval(x))
-#print(LM_database.columns)
+# Convert the 'KNs Covered' column to a list of strings
+LM_database['KNs Covered'] = LM_database['KNs Covered'].str.split(',')
+# Convert 'Time to Complete' to decimal format (from MM:SS format)
+LM_database['Time to Complete'] = LM_database['Time to Complete'].str.split(":").apply(lambda x: int(x[0]) + int(x[1]) / 60)
+
+
 
 #Create the learner profile from the file
 profile_database = pd.read_excel(learner_profile)
 
 # Convert string representation of lists to actual lists using a lambda function
-profile_database['cognitive_levels'] = profile_database['cognitive_levels'].apply(lambda x: ast.literal_eval(x))
+#profile_database['cognitive_levels'] = profile_database['cognitive_levels'].apply(lambda x: ast.literal_eval(x))
 profile_database['goals'] = profile_database['goals'].apply(lambda x: ast.literal_eval(x) if x != '[]' else [])
 
 # This is the point in the code where we start solving problems for individual learners.
-goal_nodes = profile_database['goals'][0]
+student_profile_id = 0
+print("Student profile is: ", student_profile_id )
+
+goal_nodes = profile_database['goals'][student_profile_id]
 
 KS = []
 for goals in goal_nodes:
@@ -58,7 +65,53 @@ for goals in goal_nodes:
 # Delete duplicates from the knowledge set
 KS = list(set(KS))
 
+# Multiply by 100 for convenience when comparing student learning goal times to LM times
+max_time = int(profile_database['maximum_time'][student_profile_id]) * 100
+min_time = int(profile_database['minimum_time'][student_profile_id]) * 100
 
+# Get the first element of the column as a string
+cog_levels_str = profile_database['cognitive_levels'][student_profile_id]
+
+# Evaluate the string as a Python expression and convert it into a list of integers
+# These are ranked from CL 1 to 3, where 3 is most advanced
+cog_levels_list = list(ast.literal_eval(cog_levels_str))
+print(cog_levels_list)
+
+# Capture the users rankings for preferred content type from 1-9, where 1 is most preferred
+research = int(profile_database['research'][student_profile_id])
+website = int(profile_database['website'][student_profile_id])
+discussion = int(profile_database['discussion'][student_profile_id])
+educational = int(profile_database['educational'][student_profile_id])
+news_article = int(profile_database['news_article'][student_profile_id])
+diy = int(profile_database['diy'][student_profile_id])
+lecture = int(profile_database['lecture'][student_profile_id])
+powerpoint = int(profile_database['powerpoint'][student_profile_id])
+textbook_excerpt = int(profile_database['textbook_excerpt'][student_profile_id])
+
+# Capture the users preferred media type
+preferred_media = profile_database['preferred_media'][student_profile_id]
+
+# Capture the learning object variables of interest
+LM_difficulty = LM_database['Knowledge Density (Subjective)']
+LM_titles = LM_database['Title']
+LM_KNs_Covered = LM_database['KNs Covered']
+# Next define parameters for set covering problem
+lm_time_taken = LM_database['Time to Complete'].to_numpy()
+lm_time_taken = [int(x * 100) for x in lm_time_taken]
+print(lm_time_taken)
+
+# Define a function that maps strings to integers
+def difficulty_to_int(difficulty):
+    if difficulty == "Low":
+        return 1
+    elif difficulty == "Medium":
+        return 2
+    elif difficulty == "High":
+        return 3
+    elif difficulty == "Very High":
+        return 4
+    else:
+        return 0  # default value for unknown strings
 
 # Print the students goal nodes.
 #for node in KS:
