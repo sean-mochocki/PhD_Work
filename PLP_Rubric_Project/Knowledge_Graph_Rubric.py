@@ -95,11 +95,45 @@ preferred_media = profile_database['preferred_media'][student_profile_id]
 LM_difficulty = LM_database['Knowledge Density (Subjective)']
 LM_titles = LM_database['Title']
 LM_KNs_Covered = LM_database['KNs Covered']
-# Next define parameters for set covering problem
+# Define the duration of the LMs
 lm_time_taken = LM_database['Time to Complete'].to_numpy()
 lm_time_taken = [int(x * 100) for x in lm_time_taken]
-print(lm_time_taken)
 
+# Capture the LM parameters based on the Cognitive Theory of Multimedia Learning
+lm_Multimedia_score = LM_database['Multimedia Principle']
+
+CTML_List = ['Coherence Principle', 'Segmenting Principle', 'Worked Example Principle', 'Signaling Principle', 'Spatial Contiguity Principle', 'Temporal Contiguity Principle', 'Modality Principle',
+             'Redundancy Principle', 'Personalization Principle', 'Voice Principle', 'Sourcing Principle']
+
+lm_Coherence_score = LM_database['Coherence Principle']
+lm_Segmenting_score = LM_database['Segmenting Principle']
+lm_WorkedExample_score = LM_database['Worked Example Principle']
+lm_Signaling_score = LM_database['Signaling Principle']
+lm_SpatialContiguity_score = LM_database['Spatial Contiguity Principle']
+lm_TemporalContiguity_score = LM_database['Temporal Contiguity Principle']
+lm_Modality_score = LM_database['Modality Principle']
+lm_Redundancy_score = LM_database['Redundancy Principle']
+lm_Personalization_score = LM_database['Personalization Principle']
+lm_Voice_score = LM_database['Voice Principle']
+lm_Sourcing_score = LM_database['Sourcing Principle']
+
+lm_CTML_score = []
+
+#Find the average CTML score for each LM
+for index, score in enumerate(lm_Multimedia_score):
+    if score== 1: lm_CTML_score.append(1)
+    else:
+        lm_running_average = 0
+        lm_CTML_count = 0
+        for element in CTML_List:
+            if LM_database[element][index]!=0:
+                lm_running_average += LM_database[element][index]
+                lm_CTML_count += 1
+        lm_CTML_score.append(lm_running_average/lm_CTML_count)
+        #if lm_Coherence_score[index] !=0:
+        #    lm_running_average += lm_Coherence_score[index]
+        #    lm_CTML_count += 1
+print(lm_CTML_score)
 # Define a function that maps strings to integers
 def difficulty_to_int(difficulty):
     if difficulty == "Low":
