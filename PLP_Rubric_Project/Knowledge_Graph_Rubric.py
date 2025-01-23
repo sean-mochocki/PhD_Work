@@ -1,6 +1,7 @@
 import igraph as ig
 import pandas as pd
 import ast
+import spacy
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -38,6 +39,10 @@ LM_database = pd.read_excel(learning_materials)
 LM_database['KNs Covered'] = LM_database['KNs Covered'].str.split(',')
 # Convert 'Time to Complete' to decimal format (from MM:SS format)
 LM_database['Time to Complete'] = LM_database['Time to Complete'].str.split(":").apply(lambda x: int(x[0]) + int(x[1]) / 60)
+
+nlp = spacy.load("en_core_web_sm")
+text1 = LM_database['Description'][0]
+text2 = LM_database['Description'][1]
 
 # In this section we determine the CTML score of each LM. This score does not depend on individual learners so we can accomplish this task before loading the learner profile
 
