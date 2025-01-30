@@ -1,0 +1,67 @@
+AI in General
+Foundational Concepts
+AI Capabilities
+Definitions of AI and intelligence
+Turing Test and its improvements
+Demonstrating capability versus modeling people
+History of AI
+Misconceptions about AI
+Main subareas of AI
+Numeric AI vs symbolic AI
+AI versus machine learning
+Deduction abduction and induction
+Knowledge representation
+Symbolic reasoning
+Numeric reasoning
+Linear models
+Nonlinear models and artificial neural networks
+Planning and search
+Machine learning in general
+Supervised and unsupervised learning
+Required amount of data to adequately train a model
+Random initialization vs transfer learning
+Supervised machine learning: symbolic models
+Supervised machine learning: numeric models
+Learning of sequences: RNNs
+Training of artificial neural networks
+Unsupervised machine learning
+Methods for explanation of AI results
+Particular threats to AI Systems
+AI applications
+Natural Language Processing
+Question answering
+Generation of natural language
+Chatbots for user interaction on simple tasks
+Computer vision
+Edge finding
+Region finding
+Convolutional neural networks for computer vision
+Image and video classification
+Image comparison
+Management in general
+Automation of routine forms
+Researching possible contracts
+Tracking contractor execution
+Rating employment contracts
+Automatically rating individual performance
+Finance
+Law
+Electronic discovery
+Automated policy enforcement
+Cybersecurity
+Spam and Phishing detection
+Distinguishing malicious activity
+Identifying useful signatures from examples
+Medicine
+Image classification
+Diagnosis from records
+Management of AI projects
+AI management roles
+Continuous development strategies
+U.S. government AI initiatives
+International AI activity
+Responsible AI
+Legal issues in AI
+Risks of AI
+Developing trust in AI
+Speech Processing
