@@ -26,40 +26,40 @@ Training of artificial neural networks -> Supervised machine learning: numeric m
 Unsupervised machine learning -> Foundational Concepts
 Methods for explanation of AI results -> Foundational Concepts
 Particular threats to AI Systems -> Foundational Concepts
-AI applications -> AI in General
-Natural Language Processing -> AI applications
+AI Applications -> AI in General
+Natural Language Processing -> AI Applications
 Question answering -> Natural Language Processing
 Generation of natural language -> Natural Language Processing
 Speech Processing -> Natural Language Processing
 Chatbots for user interaction on simple tasks -> Generation of natural language
-Computer vision -> AI applications
-Edge finding -> Computer vision
-Region finding -> Computer vision
-Convolutional neural networks for computer vision -> Computer vision
-Image and video classification -> Computer vision
-Image comparison -> Computer vision
-Management in general -> AI applications
+Computer Vision -> AI Applications
+Edge finding -> Computer Vision
+Region finding -> Computer Vision
+Convolutional neural networks for computer vision -> Computer Vision
+Image and video classification -> Computer Vision
+Image comparison -> Computer Vision
+Management in general -> AI Applications
 Automation of routine forms -> Management in general
 Researching possible contracts -> Management in general
 Tracking contractor execution -> Management in general
 Rating employment contracts -> Management in general
 Automatically rating individual performance -> Management in general
 Finance -> Management in general
-Law -> AI applications
+Law -> AI Applications
 Electronic discovery -> Law
 Automated policy enforcement -> Law
-Cybersecurity -> AI applications
+Cybersecurity -> AI Applications
 Spam and Phishing detection -> Cybersecurity
 Distinguishing malicious activity -> Cybersecurity
 Identifying useful signatures from examples -> Cybersecurity
-Medicine -> AI applications
+Medicine -> AI Applications
 Image classification -> Medicine
 Diagnosis from records -> Medicine
-Management of AI projects -> AI in General
-AI management roles -> Management of AI projects
-Continuous development strategies -> Management of AI projects
-U.S. government AI initiatives -> Management of AI projects
-International AI activity -> Management of AI projects
+Management of AI Project -> AI in General
+AI management roles -> Management of AI Project
+Continuous Development Strategies -> Management of AI Project
+U.S. government AI initiatives -> Management of AI Project
+International AI activity -> Management of AI Project
 Responsible AI -> AI in General
 Legal issues in AI -> Responsible AI
 Risks of AI -> Responsible AI

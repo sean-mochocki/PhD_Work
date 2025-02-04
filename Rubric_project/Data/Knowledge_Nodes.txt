@@ -27,12 +27,12 @@ Training of artificial neural networks
 Unsupervised machine learning
 Methods for explanation of AI results
 Particular threats to AI Systems
-AI applications
+AI Applications
 Natural Language Processing
 Question answering
 Generation of natural language
 Chatbots for user interaction on simple tasks
-Computer vision
+Computer Vision
 Edge finding
 Region finding
 Convolutional neural networks for computer vision
@@ -55,9 +55,9 @@ Identifying useful signatures from examples
 Medicine
 Image classification
 Diagnosis from records
-Management of AI projects
+Management of AI Project
 AI management roles
-Continuous development strategies
+Continuous Development Strategies
 U.S. government AI initiatives
 International AI activity
 Responsible AI

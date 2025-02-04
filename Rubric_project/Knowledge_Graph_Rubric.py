@@ -1,15 +1,24 @@
 import igraph as ig
 import pandas as pd
 import ast
+from scipy.stats import pearsonr, spearmanr
+from sklearn.preprocessing import OneHotEncoder
 import spacy
+import seaborn as sns
 from sentence_transformers import SentenceTransformer, util
 import matplotlib.pyplot as plt
 import numpy as np
 
-knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/PLP_Rubric_Project/Data/Knowledge_Nodes.txt"
-knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/PLP_Rubric_Project/Data/Knowledge_Graph_Edges.txt"
-learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/PLP_Rubric_Project/Data/Learner_Profile_8_Jan_2025.xlsx"
-learning_materials = "/home/sean/Desktop/PhD_Work/PhD_Work/PLP_Rubric_Project/Data/Learning_Materials_Base_set.xlsx"
+from sklearn.cluster import KMeans
+from sklearn.metrics.pairwise import cosine_distances
+from sklearn.metrics import silhouette_score
+from sklearn.decomposition import PCA
+from sklearn.cluster import DBSCAN
+
+knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
+knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
+learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learner_Profile_8_Jan_2025.xlsx"
+learning_materials = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learning_Materials_Base_set.xlsx"
 
 # This is the section where we create the Knowledge Graph
 
@@ -58,9 +67,49 @@ LM_database['Time to Complete'] = LM_database['Time to Complete'].str.split(":")
 
 #model = SentenceTransformer('all-MiniLM-L6-v2')
 model = SentenceTransformer('all-mpnet-base-v2')
-
-# Convert descriptions to embeddings
 LM_database['embeddings'] = LM_database['Description'].apply(lambda x: model.encode(x, convert_to_tensor=True))
+
+# Convert embeddings to a format suitable for similarity calculation
+#embeddings = np.vstack([embedding.cpu().numpy() for embedding in LM_database['embeddings']])
+
+# Calculate pairwise cosine similarity matrix
+#cosine_similarity_matrix = util.pytorch_cos_sim(embeddings, embeddings).numpy()
+
+
+
+
+# Compute cosine distance matrix
+#distance_matrix = cosine_distances(embeddings)
+
+#k_high = 80
+
+#silhouette_scores = []
+#for num_clusters in range(2, k_high):
+#    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+#    cluster_labels = kmeans.fit_predict(distance_matrix)
+#    silhouette_avg = silhouette_score(distance_matrix, cluster_labels)
+#    silhouette_scores.append(silhouette_avg)
+
+# Plot the Silhouette Scores
+#plt.figure(figsize=(10, 6))
+#plt.plot(range(2, k_high), silhouette_scores, marker='o')
+#plt.xlabel('Number of Clusters')
+#plt.ylabel('Silhouette Score')
+#plt.title('Silhouette Score for Optimal Number of Clusters')
+#plt.grid(True)
+#plt.show()
+#plt.savefig('Cohesiveness_Silhoutte.png', dpi=300)
+# Apply K-Means Clustering
+#num_clusters = 5  # You can adjust the number of clusters
+#kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+#cluster_labels = kmeans.fit_predict(distance_matrix)
+
+# Assign cluster labels to the DataFrame
+#LM_database['cluster'] = cluster_labels
+
+# Print the cluster assignments
+#print(LM_database[['Description', 'cluster']])
+
 
 # Initialize the minimum similarity value and the pair of least similar descriptions
 #min_value = float('inf')
@@ -70,6 +119,18 @@ LM_database['embeddings'] = LM_database['Description'].apply(lambda x: model.enc
 #similarity_threshold = 0.5
 #above_threshold_pairs = []
 #below_threshold_count = 0
+
+# Algorithm discussion
+# Consider relationships between data when developing heuristics. This may lead to an informed search.
+# Look for correlations between cohesiveness and other characteristics.
+# Does LM difficulty correlate with CTML score? It's possible that more difficult LMs have worse CTML scores
+# Do preferred content types correlate to preferred media types? Also, does difficulty correlate to media type?
+    # It may be the case that for difficult LMs all media types available are written. So if a student is very advanced
+    # and prefers videos satisfying both categories may be difficult.
+# Additionally, consider heuristic where we include all PLPs that cover any of the topics learners are interested in and measuring these
+# Talk to Jonathan about how to weight various categories. Maybe you can ask him to weight them from 1 - X, where X is the number of categories
+
+
 #num_descriptions = len(LM_database['Description'])
 #running_tally = 0
 
@@ -175,6 +236,8 @@ for index, score in enumerate(lm_Multimedia_score):
 # Determine the Difficulty of each LM. This variable is not dependent on the learner
 LM_difficulty = LM_database['Knowledge Density (Subjective)']
 # Define a function that maps strings to integers
+
+
 def difficulty_to_int(difficulty):
     """
     :param difficulty: Takes the string description of difficulty
@@ -193,6 +256,12 @@ def difficulty_to_int(difficulty):
 
 # Define LM_difficulty_int as integers between 1 and 4 where 1 is low and 4 is very high
 LM_difficulty_int = LM_difficulty.map(difficulty_to_int)
+
+#plt.scatter(LM_difficulty_int, lm_CTML_score)
+#plt.xlabel('LM_difficulty')
+#plt.ylabel('lm_CTML_score')
+#plt.title('Scatter Plot of LM_difficulty vs. lm_CTML_score')
+#plt.show()
 
 #Create the learner profile from the file
 profile_database = pd.read_excel(learner_profile)
@@ -319,145 +388,229 @@ def calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_di
 matching_scores = calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_dict)
 
 
+correlation_graph = False
+
+if correlation_graph:
+    data = {
+        'LM Difficulty': LM_difficulty_int,
+        'LM_CTML Score': lm_CTML_score,
+        'LM_Duration': lm_time_taken,
+        'content_type': LM_database['Content Type'],
+        'media_type': LM_database['Engagement Type']
+    }
+
+    df = pd.DataFrame(data)
+
+    one_hot_encoder = OneHotEncoder()
+
+    # Encode preferred content type
+    content_type_encoded = one_hot_encoder.fit_transform(df[['content_type']]).toarray()
+    content_type_labels = one_hot_encoder.categories_[0]
+    content_type_df = pd.DataFrame(content_type_encoded, columns=content_type_labels)
+
+    # Encode preferred media type
+    media_type_encoded = one_hot_encoder.fit_transform(df[['media_type']]).toarray()
+    media_type_labels = one_hot_encoder.categories_[0]
+    media_type_df = pd.DataFrame(media_type_encoded, columns=media_type_labels)
+
+
+    # Combine encoded variables with the original data
+    df_encoded = pd.concat([df.drop(['content_type', 'media_type'], axis=1), content_type_df, media_type_df], axis=1)
+
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 1000)
+
+    corr_matrix = df_encoded.corr(method='spearman')
+    print(corr_matrix)
+
+    # Function to format the annotations
+    def format_annotation(val):
+        if val < 0:
+            return f'({-val:.2f})'
+        return f'{val:.2f}'
+
+    annot = corr_matrix.applymap(format_annotation)
+
+    plt.figure(figsize=(12, 10))
+    heatmap = sns.heatmap(corr_matrix, annot=annot, fmt="", cmap="coolwarm_r", cbar=True)
+
+    # Rotate the x-axis labels for better readability
+    heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
+
+    # Format color bar tick labels
+    colorbar = heatmap.collections[0].colorbar
+    tick_labels = colorbar.get_ticks()
+    formatted_tick_labels = [format_annotation(tick) if tick < 0 else f'{tick:.2f}' for tick in tick_labels]
+    colorbar.set_ticks(tick_labels)
+    colorbar.set_ticklabels(formatted_tick_labels)
+
+    # Save the plot as an image
+
+    # Save the plot as an image
+    plt.savefig('correlation_matrix.png', dpi=300, bbox_inches='tight')  # Use bbox_inches='tight' to ensure nothing is clipped
+    # Save the plot as an image
+    plt.savefig('correlation_matrix.png', dpi=300)
+
+# Show the plot
+
 # Determine the number of candidate learning materials
 num_LMs = len(LM_database)
 
-# Create a random personalized learning path with 0's and 1's
-personalized_learning_path = np.random.choice([0, 1], size=num_LMs, p=[0.5, 0.5])
+run_test = True
 
-# Initialize variables
-total_difficulty_score = 0
-#total_media_score is the average of LM_media_match and flipped_preference_score
-total_LM_media_match = 0
-total_flipped_preference_score = 0
-total_media_score = 0
-total_CTML_score =0
-total_time = 0
-count = 0
-total_covering_non_goals = 0
-total_covering_goals = 0
+if run_test:
+    # Create a random personalized learning path with 0's and 1's
+    personalized_learning_path = np.random.choice([0, 1], size=num_LMs, p=[0.5, 0.5])
 
-# Convert KS to a list of strings based on KNs
-KS_names = [KNs[i] for i in KS]
-# LM_KNs_Covered - a list of lists of the Knowledge Nodes covered by each Learning Material
-# Goal - iterate through all LMs and add up the number of coverings of KNs performed by LMs that are not goal nodes.
+    KS_names = [KNs[i] for i in KS]
+    #print(KS)
+    print(KS_names)
+    # In run coherence test we only include LMs that exclusively cover student goal nodes.
 
-# Iterate through the candidate learning path and match scores
-for i in range(len(personalized_learning_path)):
-    if personalized_learning_path[i] == 1:
-        # Add up the number of non-goal KNs covered by learning material
-        for kn in LM_KNs_Covered[i]:
-            if kn not in KS_names: total_covering_non_goals += 1
-            else: total_covering_goals += 1
-        total_media_score += LM_overall_preference_score[i]
-        total_LM_media_match += LM_media_match[i]
-        total_flipped_preference_score += flipped_preference_score[i]
-        total_difficulty_score += matching_scores[i]
-        total_CTML_score += lm_CTML_score[i]
-        total_time += lm_time_taken[i]
-        count += 1
+    # Note, we need to check all KNs to make sure that data is consistent.
+    run_coherence_test = True
+    if run_coherence_test:
+        # Select LMs that only cover goal KNs
+        for i in range(num_LMs):
+            #print(f"Checking LM_KNs_Covered[{i}]: {LM_KNs_Covered[i]}")
+            if any(kn in KS_names for kn in LM_KNs_Covered[i]):
+                #print(LM_KNs_Covered[i])
+                personalized_learning_path[i] = 1
+            else:
+                personalized_learning_path[i] = 0
 
-# Begin Balanced Cover Section
-# number of goal Knowledge Nodes in KS
-#print("Total number of non-goal coverings", total_covering_non_goals)
-print("Total number of goal coverings", total_covering_goals)
-print("Number of goal KNs", len(KS_names))
+    # Initialize variables
+    total_difficulty_score = 0
+    #total_media_score is the average of LM_media_match and flipped_preference_score
+    total_LM_media_match = 0
+    total_flipped_preference_score = 0
+    total_media_score = 0
+    total_CTML_score =0
+    total_time = 0
+    count = 0
+    total_covering_non_goals = 0
+    total_covering_goals = 0
 
-balanced_cover_total = 0
+    # Convert KS to a list of strings based on KNs
+    # LM_KNs_Covered - a list of lists of the Knowledge Nodes covered by each Learning Material
+    # Goal - iterate through all LMs and add up the number of coverings of KNs performed by LMs that are not goal nodes.
 
-for kn in KS_names:
-    num_coverings = 0
+    # Iterate through the candidate learning path and match scores
     for i in range(len(personalized_learning_path)):
         if personalized_learning_path[i] == 1:
-            if kn in LM_KNs_Covered[i]: num_coverings +=1
-    #print("number of coverings is:", num_coverings)
-    balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
-    #print("balanced score ", kn, " is ", abs(num_coverings - total_covering_goals / len(KS_names)))
-#    for j in range(len(personalized_learning_path)):
-#print("Balanced Cover is: ", balanced_cover_total)
-print("Average Balanced Cover is: ", balanced_cover_total / len(KS_names))
-# End Balanced Cover Section
+            # Add up the number of non-goal KNs covered by learning material
+            for kn in LM_KNs_Covered[i]:
+                if kn not in KS_names: total_covering_non_goals += 1
+                else: total_covering_goals += 1
+            total_media_score += LM_overall_preference_score[i]
+            total_LM_media_match += LM_media_match[i]
+            total_flipped_preference_score += flipped_preference_score[i]
+            total_difficulty_score += matching_scores[i]
+            total_CTML_score += lm_CTML_score[i]
+            total_time += lm_time_taken[i]
+            count += 1
 
-if total_time > max_time:
-    print("PLP exceeds max time by", ((total_time - max_time) / max_time) * 100, "percent")
-elif total_time < min_time:
-    print("PLP is less than min time by", ((min_time - total_time) / min_time) * 100, "percent")
-else:
-    print("PLP is within the student time constraints.")
+    # Begin Balanced Cover Section
+    # number of goal Knowledge Nodes in KS
+    #print("Total number of non-goal coverings", total_covering_non_goals)
+    print("Total number of goal coverings", total_covering_goals)
+    print("Number of goal KNs", len(KS_names))
 
-# Calculate average matching score
-average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
-average_media_preference_score = total_media_score / count if count > 0 else 0
-average_CTML_score = total_CTML_score / count if count > 0 else 0
-average_LM_media_match = total_LM_media_match / count if count > 0 else 0
-average_preference = total_flipped_preference_score / count if count > 0 else 0
-average_coherence = total_covering_non_goals / count if count > 0 else 0
-multiple_document_principle_average = total_covering_goals / len(KS_names)
-average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
+    balanced_cover_total = 0
+
+    for kn in KS_names:
+        num_coverings = 0
+        for i in range(len(personalized_learning_path)):
+            if personalized_learning_path[i] == 1:
+                if kn in LM_KNs_Covered[i]: num_coverings +=1
+        print("number of coverings for ", kn, "is:", num_coverings)
+        balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
+        #print("balanced score ", kn, " is ", abs(num_coverings - total_covering_goals / len(KS_names)))
+    #    for j in range(len(personalized_learning_path)):
+    #print("Balanced Cover is: ", balanced_cover_total)
+    print("Average Balanced Cover is: ", balanced_cover_total / len(KS_names))
+    # End Balanced Cover Section
+
+    if total_time > max_time:
+        print("PLP exceeds max time by", ((total_time - max_time) / max_time) * 100, "percent")
+    elif total_time < min_time:
+        print("PLP is less than min time by", ((min_time - total_time) / min_time) * 100, "percent")
+    else:
+        print("PLP is within the student time constraints.")
+
+    # Calculate average matching score
+    average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
+    average_media_preference_score = total_media_score / count if count > 0 else 0
+    average_CTML_score = total_CTML_score / count if count > 0 else 0
+    average_LM_media_match = total_LM_media_match / count if count > 0 else 0
+    average_preference = total_flipped_preference_score / count if count > 0 else 0
+    average_coherence = total_covering_non_goals / count if count > 0 else 0
+    multiple_document_principle_average = total_covering_goals / len(KS_names)
+    average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
+
+    # calculate the average cohesiveness of the PLP
+    # Filter the embeddings of included learning materials
+    included_embeddings = [LM_database['embeddings'][i] for i in range(num_LMs) if personalized_learning_path[i] == 1]
+
+    num_included_LMs = len(included_embeddings)
+    total_similarity = 0
+    count = 0
+
+    for i in range(num_included_LMs):
+        for j in range(i + 1, num_included_LMs):
+            similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
+            normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
+            total_similarity += normalized_similarity
+            count += 1
+
+    average_cohesiveness = total_similarity / count if count > 0 else 0
+
+    # End section to calculate cohesiveness
+
+    # Print the personalized learning path and the average matching score
+    #print("Personalized Learning Path:", personalized_learning_path)
+    print("Total number of LMs is:", num_included_LMs)
+    print("Average Difficulty Matching Score:", average_difficulty_matching_score)
+    print("Average Overall Media Matching Score", average_media_preference_score)
+    print("Average LM Media Matching Score", average_LM_media_match)
+    print("Average LM Preference Matching Score", average_preference)
+    print("Average CTML Score", average_CTML_score)
+    print("Average Cohesiveness:", average_cohesiveness)
+    print("Total Time Taken", total_time)
+    print("Average Coherence", average_coherence)
+    print("Average Segmenting", average_segmenting_principle)
+    print("Multiple Document Integration Score", multiple_document_principle_average)
 
 
-# calculate the average cohesiveness of the PLP
-# Filter the embeddings of included learning materials
-included_embeddings = [LM_database['embeddings'][i] for i in range(num_LMs) if personalized_learning_path[i] == 1]
+    # Print the personalized learning path
+    # print("Personalized Learning Path:", personalized_learning_path)
 
-num_included_LMs = len(included_embeddings)
-total_similarity = 0
-count = 0
+    # Print the scores
+    #for i, score in enumerate(matching_scores):
+    #    if score != 0: print(f"LM {i+1} has a matching score of {score:.3f}")
 
-for i in range(num_included_LMs):
-    for j in range(i + 1, num_included_LMs):
-        similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
-        normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
-        total_similarity += normalized_similarity
-        count += 1
-
-average_cohesiveness = total_similarity / count if count > 0 else 0
-
-# End section to calculate cohesiveness
-
-# Print the personalized learning path and the average matching score
-#print("Personalized Learning Path:", personalized_learning_path)
-print("Average Difficulty Matching Score:", average_difficulty_matching_score)
-print("Average Overall Media Matching Score", average_media_preference_score)
-print("Average LM Media Matching Score", average_LM_media_match)
-print("Average LM Preference Matching Score", average_preference)
-print("Average CTML Score", average_CTML_score)
-print("Average Cohesiveness:", average_cohesiveness)
-print("Total Time Taken", total_time)
-print("Average Coherence", average_coherence)
-print("Average Segmenting", average_segmenting_principle)
-print("Multiple Document Integration Score", multiple_document_principle_average)
+    # Example lookup
+    #KN = 'Speech Processing'
+    #cog_level = KN_cog_level_dict.get(KN, "KN not found")
+    #print(f"Cognitive level for {KN}: {cog_level}")
 
 
-# Print the personalized learning path
-# print("Personalized Learning Path:", personalized_learning_path)
+    #print(LM_difficulty_int)
+    # Print the students goal nodes.
+    #for node in KS:
+    #    print(KG.vs[node]['name'])
 
-# Print the scores
-#for i, score in enumerate(matching_scores):
-#    if score != 0: print(f"LM {i+1} has a matching score of {score:.3f}")
+    # Visualize the Graph
+    #layout = KG.layout_fruchterman_reingold(grid="nogrid")
+    #fig, ax = plt.subplots()
 
-# Example lookup
-#KN = 'Speech Processing'
-#cog_level = KN_cog_level_dict.get(KN, "KN not found")
-#print(f"Cognitive level for {KN}: {cog_level}")
+    # Adjust font size and color for better readability
+    #ig.plot(KG, target=ax, layout=layout, vertex_size=12,
+    #        vertex_label=KG.vs['name'], edge_curved=True,
+    #        vertex_label_size=5, vertex_label_color='black')  # Set label color to black
 
-
-#print(LM_difficulty_int)
-# Print the students goal nodes.
-#for node in KS:
-#    print(KG.vs[node]['name'])
-
-# Visualize the Graph
-#layout = KG.layout_fruchterman_reingold(grid="nogrid")
-#fig, ax = plt.subplots()
-
-# Adjust font size and color for better readability
-#ig.plot(KG, target=ax, layout=layout, vertex_size=12,
-#        vertex_label=KG.vs['name'], edge_curved=True,
-#        vertex_label_size=5, vertex_label_color='black')  # Set label color to black
-
-#plt.show()
-#plt.close()
+    #plt.show()
+    #plt.close()
 
 
 
