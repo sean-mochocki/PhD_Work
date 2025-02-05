@@ -46,7 +46,7 @@ KG.add_edges(edges)
 # Create the set of LMs from the file
 LM_database = pd.read_excel(learning_materials)
 # Convert the 'KNs Covered' column to a list of strings
-LM_database['KNs Covered'] = LM_database['KNs Covered'].str.split(',')
+LM_database['KNs Covered'] = LM_database['KNs Covered'].str.split(', ')
 # Convert 'Time to Complete' to decimal format (from MM:SS format)
 LM_database['Time to Complete'] = LM_database['Time to Complete'].str.split(":").apply(lambda x: int(x[0]) + int(x[1]) / 60)
 
@@ -467,6 +467,8 @@ if run_test:
     print(KS_names)
     # In run coherence test we only include LMs that exclusively cover student goal nodes.
 
+    #
+    KS_names = KNs
     # Note, we need to check all KNs to make sure that data is consistent.
     run_coherence_test = True
     if run_coherence_test:

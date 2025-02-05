@@ -10,11 +10,11 @@ Numeric AI vs symbolic AI -> AI Capabilities
 AI versus machine learning -> AI Capabilities
 Deduction abduction and induction -> AI Capabilities
 Knowledge representation -> Foundational Concepts
-Symbolic reasoning -> Foundational Concepts
-Numeric reasoning -> Foundational Concepts
-Linear models -> Numeric reasoning
-Nonlinear models and artificial neural networks -> Numeric reasoning
-Planning and search -> Numeric reasoning
+Symbolic Reasoning -> Foundational Concepts
+Numeric Reasoning -> Foundational Concepts
+Linear Models -> Numeric Reasoning
+Nonlinear models and artificial neural networks -> Numeric Reasoning
+Planning and search -> Numeric Reasoning
 Machine learning in general -> Foundational Concepts
 Supervised and unsupervised learning -> Machine learning in general
 Required amount of data to adequately train a model -> Machine learning in general
@@ -28,39 +28,39 @@ Methods for explanation of AI results -> Foundational Concepts
 Particular threats to AI Systems -> Foundational Concepts
 AI Applications -> AI in General
 Natural Language Processing -> AI Applications
-Question answering -> Natural Language Processing
-Generation of natural language -> Natural Language Processing
+Question Answering -> Natural Language Processing
+Generation of Natural Language -> Natural Language Processing
 Speech Processing -> Natural Language Processing
-Chatbots for user interaction on simple tasks -> Generation of natural language
+Chatbots for user interaction on simple tasks -> Generation of Natural Language
 Computer Vision -> AI Applications
-Edge finding -> Computer Vision
-Region finding -> Computer Vision
+Edge Finding -> Computer Vision
+Region Finding -> Computer Vision
 Convolutional neural networks for computer vision -> Computer Vision
 Image and video classification -> Computer Vision
 Image comparison -> Computer Vision
 Management in general -> AI Applications
-Automation of routine forms -> Management in general
+Automation of Routine Forms -> Management in general
 Researching possible contracts -> Management in general
 Tracking contractor execution -> Management in general
 Rating employment contracts -> Management in general
 Automatically rating individual performance -> Management in general
 Finance -> Management in general
 Law -> AI Applications
-Electronic discovery -> Law
+Electronic Discovery -> Law
 Automated policy enforcement -> Law
 Cybersecurity -> AI Applications
 Spam and Phishing detection -> Cybersecurity
 Distinguishing malicious activity -> Cybersecurity
-Identifying useful signatures from examples -> Cybersecurity
+Identifying Useful Signatures from examples -> Cybersecurity
 Medicine -> AI Applications
-Image classification -> Medicine
+Image Classification -> Medicine
 Diagnosis from records -> Medicine
 Management of AI Project -> AI in General
-AI management roles -> Management of AI Project
+AI Management Roles -> Management of AI Project
 Continuous Development Strategies -> Management of AI Project
-U.S. government AI initiatives -> Management of AI Project
+U.S. Government AI initiatives -> Management of AI Project
 International AI activity -> Management of AI Project
 Responsible AI -> AI in General
 Legal issues in AI -> Responsible AI
 Risks of AI -> Responsible AI
-Developing trust in AI -> Responsible AI
+Developing Trust in AI -> Responsible AI

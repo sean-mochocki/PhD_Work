@@ -11,9 +11,9 @@ Numeric AI vs symbolic AI
 AI versus machine learning
 Deduction abduction and induction
 Knowledge representation
-Symbolic reasoning
-Numeric reasoning
-Linear models
+Symbolic Reasoning
+Numeric Reasoning
+Linear Models
 Nonlinear models and artificial neural networks
 Planning and search
 Machine learning in general
@@ -29,39 +29,39 @@ Methods for explanation of AI results
 Particular threats to AI Systems
 AI Applications
 Natural Language Processing
-Question answering
-Generation of natural language
+Question Answering
+Generation of Natural Language
 Chatbots for user interaction on simple tasks
 Computer Vision
-Edge finding
-Region finding
+Edge Finding
+Region Finding
 Convolutional neural networks for computer vision
 Image and video classification
 Image comparison
 Management in general
-Automation of routine forms
+Automation of Routine Forms
 Researching possible contracts
 Tracking contractor execution
 Rating employment contracts
 Automatically rating individual performance
 Finance
 Law
-Electronic discovery
+Electronic Discovery
 Automated policy enforcement
 Cybersecurity
 Spam and Phishing detection
 Distinguishing malicious activity
-Identifying useful signatures from examples
+Identifying Useful Signatures from examples
 Medicine
-Image classification
+Image Classification
 Diagnosis from records
 Management of AI Project
-AI management roles
+AI Management Roles
 Continuous Development Strategies
-U.S. government AI initiatives
+U.S. Government AI initiatives
 International AI activity
 Responsible AI
 Legal issues in AI
 Risks of AI
-Developing trust in AI
+Developing Trust in AI
 Speech Processing
