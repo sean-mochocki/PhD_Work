@@ -9,12 +9,6 @@ from sentence_transformers import SentenceTransformer, util
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sklearn.cluster import KMeans
-from sklearn.metrics.pairwise import cosine_distances
-from sklearn.metrics import silhouette_score
-from sklearn.decomposition import PCA
-from sklearn.cluster import DBSCAN
-
 knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
 learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learner_Profile_8_Jan_2025.xlsx"
@@ -31,188 +25,24 @@ with open(knowledge_nodes, 'r') as file:
 with open(knowledge_graph_edges, "r") as file:
     edges = [line.strip().split(" -> ") for line in file]
 
+# Create knowledge graph from data files
 KG = ig.Graph(directed=True)
 KG.add_vertices(KNs)
-
-# Add Nodes from the edges (ensure all nodes are added)
-#all_nodes = set([node for edge in edges for node in edge])
 KG.add_edges(edges)
 
-#path = KG.get_shortest_paths("Generation of natural language", "AI in General")[0]
-#print(path)
-#node_names = [KG.vs[node_index]['name'] for node_index in path]
-#print(node_names)
-#print(KG)
-# Create the set of LMs from the file
+# Create LM database and define parameters
 LM_database = pd.read_excel(learning_materials)
-# Convert the 'KNs Covered' column to a list of strings
 LM_database['KNs Covered'] = LM_database['KNs Covered'].str.split(', ')
-# Convert 'Time to Complete' to decimal format (from MM:SS format)
 LM_database['Time to Complete'] = LM_database['Time to Complete'].str.split(":").apply(lambda x: int(x[0]) + int(x[1]) / 60)
+# Define the duration of the LMs - this does not depend on individual learners
+lm_time_taken = LM_database['Time to Complete'].to_numpy()
+lm_time_taken = [int(x * 100) for x in lm_time_taken]
 
-#nlp = en_core_web_md.load()
-#nlp = spacy.load("/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/lib/python3.12/site-packages/en_core_web_md/en_core_web_md-3.8.0")
-#text1 = LM_database['Description'][50]
-#text2 = LM_database['Description'][101]
-#text3 = LM_database['Description'][340]
-
-#text1 = nlp(text1)
-#text2 = nlp(text2)
-#text3 = nlp(text3)
-
-#print(text1.similarity(text2))
-#print(text1.similarity(text3))
-
-
-
-#model = SentenceTransformer('all-MiniLM-L6-v2')
+# Get Sentence Transformer model to be used to calculate cohesiveness
 model = SentenceTransformer('all-mpnet-base-v2')
 LM_database['embeddings'] = LM_database['Description'].apply(lambda x: model.encode(x, convert_to_tensor=True))
 
-# Convert embeddings to a format suitable for similarity calculation
-#embeddings = np.vstack([embedding.cpu().numpy() for embedding in LM_database['embeddings']])
-
-# Calculate pairwise cosine similarity matrix
-#cosine_similarity_matrix = util.pytorch_cos_sim(embeddings, embeddings).numpy()
-
-
-
-
-# Compute cosine distance matrix
-#distance_matrix = cosine_distances(embeddings)
-
-#k_high = 80
-
-#silhouette_scores = []
-#for num_clusters in range(2, k_high):
-#    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-#    cluster_labels = kmeans.fit_predict(distance_matrix)
-#    silhouette_avg = silhouette_score(distance_matrix, cluster_labels)
-#    silhouette_scores.append(silhouette_avg)
-
-# Plot the Silhouette Scores
-#plt.figure(figsize=(10, 6))
-#plt.plot(range(2, k_high), silhouette_scores, marker='o')
-#plt.xlabel('Number of Clusters')
-#plt.ylabel('Silhouette Score')
-#plt.title('Silhouette Score for Optimal Number of Clusters')
-#plt.grid(True)
-#plt.show()
-#plt.savefig('Cohesiveness_Silhoutte.png', dpi=300)
-# Apply K-Means Clustering
-#num_clusters = 5  # You can adjust the number of clusters
-#kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-#cluster_labels = kmeans.fit_predict(distance_matrix)
-
-# Assign cluster labels to the DataFrame
-#LM_database['cluster'] = cluster_labels
-
-# Print the cluster assignments
-#print(LM_database[['Description', 'cluster']])
-
-
-# Initialize the minimum similarity value and the pair of least similar descriptions
-#min_value = float('inf')
-#max_value = -1
-#least_similar_pair = (None, None)
-#most_similar_pair = (None, None)
-#similarity_threshold = 0.5
-#above_threshold_pairs = []
-#below_threshold_count = 0
-
-# Algorithm discussion
-# Consider relationships between data when developing heuristics. This may lead to an informed search.
-# Look for correlations between cohesiveness and other characteristics.
-# Does LM difficulty correlate with CTML score? It's possible that more difficult LMs have worse CTML scores
-# Do preferred content types correlate to preferred media types? Also, does difficulty correlate to media type?
-    # It may be the case that for difficult LMs all media types available are written. So if a student is very advanced
-    # and prefers videos satisfying both categories may be difficult.
-# Additionally, consider heuristic where we include all PLPs that cover any of the topics learners are interested in and measuring these
-# Talk to Jonathan about how to weight various categories. Maybe you can ask him to weight them from 1 - X, where X is the number of categories
-
-
-#num_descriptions = len(LM_database['Description'])
-#running_tally = 0
-
-# Calculate similarities
-#for i in range(num_descriptions):
-#    for j in range(i + 1, num_descriptions):
-#        running_tally += 1
-#        embedding1 = LM_database['embeddings'][i]
-#        embedding2 = LM_database['embeddings'][j]
-#        similarity_score = util.pytorch_cos_sim(embedding1, embedding2).item()
-        # Cosine similarity is in the range [-1,1], we want to normalize it to [0,1]
-        # Therefore add 1 and divide by 2
-        # This has the impact that a score of 1 is completely similar, a score of 0.5 is unrelated (orthogonal), and a score of 0 means completely opposite
-#        similarity_score = (similarity_score + 1)/2
-
-#        if similarity_score < similarity_threshold:
-#            above_threshold_pairs.append((LM_database['Description'][i],
-#                                          LM_database['Description'][j],
-#                                          similarity_score))
-
-#        if similarity_score < min_value:
-#            min_value = similarity_score
-#            least_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
-
-#        if similarity_score > max_value:
-#            max_value = similarity_score
-#            most_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
-
-
-#        if similarity_score < similarity_threshold:
-#            below_threshold_count += 1
-
-#print(f"Least similar texts have a similarity score of {min_value:.2f}")
-#print("Text 1:", least_similar_pair[0])
-#print("Text 2:", least_similar_pair[1])
-#print(f"Most similar texts have a similarity score of {max_value:.2f}")
-#print("Text 1:", most_similar_pair[0])
-#print("Text 2:", most_similar_pair[1])
-#print(f"Total number of pairs: {running_tally}")
-#print(f"Number of pairs with similarity score below {similarity_threshold}: {below_threshold_count}")
-
-# Print results
-#print(f"Pairs with similarity score above {similarity_threshold}:")
-#for pair in above_threshold_pairs:
-#    print(f"Text 1: {pair[0]}")
-#    print(f"Text 2: {pair[1]}")
-#    print(f"Similarity Score: {pair[2]:.2f}")
-#    print("-" * 20)
-
-# Convert all descriptions to Doc objects and store vectors
-#LM_database['nlp_desc'] = LM_database['Description'].apply(nlp)
-
-#min_value = float('inf')
-#least_similar_pair = (None, None)
-#num_descriptions = LM_database.shape[0]
-#similarity_threshold = 0.75
-#below_threshold_count=0
-#running_tally = 0
-# Calculate similarities
-#for i in range(num_descriptions):
-#    for j in range(i + 1, num_descriptions):
-#        running_tally += 1
-#        text1 = LM_database['nlp_desc'][i]
-#        text2 = LM_database['nlp_desc'][j]
-#        value = text1.similarity(text2)
-
-#        if value < min_value:
-#            min_value = value
-#            least_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
-
-#        if value < similarity_threshold:
-#            below_threshold_count += 1
-
-#print(f"Least similar texts have similarity score of {min_value:.2f}")
-#print("Text 1:", least_similar_pair[0])
-#print("Text 2:", least_similar_pair[1])
-#print(f"Total number of pairs: {running_tally}")
-#print(f"Number of pairs with similarity score below {similarity_threshold}: {below_threshold_count}")
-
-# In this section we determine the CTML score of each LM. This score does not depend on individual learners so we can accomplish this task before loading the learner profile
-
-# Capture the LM parameters based on the Cognitive Theory of Multimedia Learning
+# Calculate the CTML score of each LM
 lm_Multimedia_score = LM_database['Multimedia Principle']
 
 CTML_List = ['Coherence Principle', 'Segmenting Principle', 'Worked Example Principle', 'Signaling Principle', 'Spatial Contiguity Principle', 'Temporal Contiguity Principle', 'Modality Principle',
@@ -233,11 +63,7 @@ for index, score in enumerate(lm_Multimedia_score):
         # Determine the lm_CTML_score based on the running average and the multimedia score.
         lm_CTML_score.append((lm_running_average * score/4)/lm_CTML_count)
 
-# Determine the Difficulty of each LM. This variable is not dependent on the learner
-LM_difficulty = LM_database['Knowledge Density (Subjective)']
-# Define a function that maps strings to integers
-
-
+# Define the LM difficulty and difficulty matching values for the learner
 def difficulty_to_int(difficulty):
     """
     :param difficulty: Takes the string description of difficulty
@@ -254,26 +80,20 @@ def difficulty_to_int(difficulty):
     else:
         return 0  # default value for unknown strings
 
+LM_difficulty = LM_database['Knowledge Density (Subjective)']
 # Define LM_difficulty_int as integers between 1 and 4 where 1 is low and 4 is very high
 LM_difficulty_int = LM_difficulty.map(difficulty_to_int)
 
-#plt.scatter(LM_difficulty_int, lm_CTML_score)
-#plt.xlabel('LM_difficulty')
-#plt.ylabel('lm_CTML_score')
-#plt.title('Scatter Plot of LM_difficulty vs. lm_CTML_score')
-#plt.show()
+# ************************ Metadata so far ***************************
+# LM_difficulty_int - a list of integers describing the LM difficulty from 1 to 4
+# lm_CTML_score - a list of floats describing the CTML value of the LMs from 1 to 4
+# lm_time_taken - a list of integers describing the length of LMs multiplied (Minutes + seconds) *100
+# KNs - The list of all KNs as strings
+# ********************************************************************
 
-#Create the learner profile from the file
+# Derive the set of learner profiles from the dataframe
 profile_database = pd.read_excel(learner_profile)
-
-# Convert string representation of lists to actual lists using a lambda function
-#profile_database['cognitive_levels'] = profile_database['cognitive_levels'].apply(lambda x: ast.literal_eval(x))
 profile_database['goals'] = profile_database['goals'].apply(lambda x: ast.literal_eval(x) if x != '[]' else [])
-
-
-# Define the duration of the LMs - this does not depend on individual learners
-lm_time_taken = LM_database['Time to Complete'].to_numpy()
-lm_time_taken = [int(x * 100) for x in lm_time_taken]
 
 # This is the point in the code where we start solving problems for individual learners. This will be a loop in the final version
 student_profile_id = 0
@@ -292,7 +112,6 @@ for goals in goal_nodes:
 # Delete duplicates from the knowledge set
 KS = list(set(KS))
 
-
 # Multiply by 100 for convenience when comparing student learning goal times to LM times
 max_time = int(profile_database['maximum_time'][student_profile_id]) * 100
 min_time = int(profile_database['minimum_time'][student_profile_id]) * 100
@@ -303,7 +122,6 @@ cog_levels_str = profile_database['cognitive_levels'][student_profile_id]
 # Evaluate the string as a Python expression and convert it into a list of integers
 # These are ranked from CL 1 to 4, where 4 is most advanced
 cog_levels_list = list(ast.literal_eval(cog_levels_str))
-#print(cog_levels_list)
 
 # Capture the users rankings for preferred content type from 1-9, where 1 is most preferred
 research = int(profile_database['research'][student_profile_id])
@@ -333,11 +151,10 @@ content_ranking = {
 LM_preferredcontent_score = [content_ranking[x] for x in LM_database['Content Type']]
 # Now we need to flip the score to rank preferred content more highly
 flipped_preference_score = [round(((10 - x) * 0.1) + 0.1, 1) for x in LM_preferredcontent_score]
-#print(flipped_preference_score)
 
 # Capture the users preferred media type and score LMs accordingly. In the case that the learner's preference is No-preference we won't use preferred_media as a factor in the fitness function
 preferred_media = profile_database['preferred_media'][student_profile_id]
-#print(preferred_media)
+
 # Decide where the student's preferred_media matches the LM media type
 LM_media_match = [1 if x == preferred_media else 0 for x in LM_database['Engagement Type']]
 #print(preferred_media)
@@ -360,7 +177,7 @@ LM_titles = LM_database['Title']
 # Create a dictionary that lets us look up KNs and determine the learner cognitive level
 KN_cog_level_dict = dict(zip(KNs, cog_levels_list))
 
-
+# Define the many-to-one relationship between LMs and KNs.
 LM_KNs_Covered = LM_database['KNs Covered']
 
 # This function calculates the difficulty matching score of LMs to learner CLs. In the case that a LM only covers 1
@@ -463,12 +280,8 @@ if run_test:
     personalized_learning_path = np.random.choice([0, 1], size=num_LMs, p=[0.5, 0.5])
 
     KS_names = [KNs[i] for i in KS]
-    #print(KS)
-    print(KS_names)
     # In run coherence test we only include LMs that exclusively cover student goal nodes.
 
-    #
-    KS_names = KNs
     # Note, we need to check all KNs to make sure that data is consistent.
     run_coherence_test = True
     if run_coherence_test:
@@ -515,7 +328,7 @@ if run_test:
     # Begin Balanced Cover Section
     # number of goal Knowledge Nodes in KS
     #print("Total number of non-goal coverings", total_covering_non_goals)
-    print("Total number of goal coverings", total_covering_goals)
+    #print("Total number of goal coverings", total_covering_goals)
     print("Number of goal KNs", len(KS_names))
 
     balanced_cover_total = 0
@@ -616,6 +429,134 @@ if run_test:
 
 
 
+
+
+
+# Compute cosine distance matrix
+#distance_matrix = cosine_distances(embeddings)
+
+#k_high = 80
+
+#silhouette_scores = []
+#for num_clusters in range(2, k_high):
+#    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+#    cluster_labels = kmeans.fit_predict(distance_matrix)
+#    silhouette_avg = silhouette_score(distance_matrix, cluster_labels)
+#    silhouette_scores.append(silhouette_avg)
+
+# Plot the Silhouette Scores
+#plt.figure(figsize=(10, 6))
+#plt.plot(range(2, k_high), silhouette_scores, marker='o')
+#plt.xlabel('Number of Clusters')
+#plt.ylabel('Silhouette Score')
+#plt.title('Silhouette Score for Optimal Number of Clusters')
+#plt.grid(True)
+#plt.show()
+#plt.savefig('Cohesiveness_Silhoutte.png', dpi=300)
+# Apply K-Means Clustering
+#num_clusters = 5  # You can adjust the number of clusters
+#kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+#cluster_labels = kmeans.fit_predict(distance_matrix)
+
+# Assign cluster labels to the DataFrame
+#LM_database['cluster'] = cluster_labels
+
+# Print the cluster assignments
+#print(LM_database[['Description', 'cluster']])
+
+
+# Initialize the minimum similarity value and the pair of least similar descriptions
+#min_value = float('inf')
+#max_value = -1
+#least_similar_pair = (None, None)
+#most_similar_pair = (None, None)
+#similarity_threshold = 0.5
+#above_threshold_pairs = []
+#below_threshold_count = 0
+
+
+#num_descriptions = len(LM_database['Description'])
+#running_tally = 0
+
+# Calculate similarities
+#for i in range(num_descriptions):
+#    for j in range(i + 1, num_descriptions):
+#        running_tally += 1
+#        embedding1 = LM_database['embeddings'][i]
+#        embedding2 = LM_database['embeddings'][j]
+#        similarity_score = util.pytorch_cos_sim(embedding1, embedding2).item()
+        # Cosine similarity is in the range [-1,1], we want to normalize it to [0,1]
+        # Therefore add 1 and divide by 2
+        # This has the impact that a score of 1 is completely similar, a score of 0.5 is unrelated (orthogonal), and a score of 0 means completely opposite
+#        similarity_score = (similarity_score + 1)/2
+
+#        if similarity_score < similarity_threshold:
+#            above_threshold_pairs.append((LM_database['Description'][i],
+#                                          LM_database['Description'][j],
+#                                          similarity_score))
+
+#        if similarity_score < min_value:
+#            min_value = similarity_score
+#            least_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
+
+#        if similarity_score > max_value:
+#            max_value = similarity_score
+#            most_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
+
+
+#        if similarity_score < similarity_threshold:
+#            below_threshold_count += 1
+
+#print(f"Least similar texts have a similarity score of {min_value:.2f}")
+#print("Text 1:", least_similar_pair[0])
+#print("Text 2:", least_similar_pair[1])
+#print(f"Most similar texts have a similarity score of {max_value:.2f}")
+#print("Text 1:", most_similar_pair[0])
+#print("Text 2:", most_similar_pair[1])
+#print(f"Total number of pairs: {running_tally}")
+#print(f"Number of pairs with similarity score below {similarity_threshold}: {below_threshold_count}")
+
+# Print results
+#print(f"Pairs with similarity score above {similarity_threshold}:")
+#for pair in above_threshold_pairs:
+#    print(f"Text 1: {pair[0]}")
+#    print(f"Text 2: {pair[1]}")
+#    print(f"Similarity Score: {pair[2]:.2f}")
+#    print("-" * 20)
+
+# Convert all descriptions to Doc objects and store vectors
+#LM_database['nlp_desc'] = LM_database['Description'].apply(nlp)
+
+#min_value = float('inf')
+#least_similar_pair = (None, None)
+#num_descriptions = LM_database.shape[0]
+#similarity_threshold = 0.75
+#below_threshold_count=0
+#running_tally = 0
+# Calculate similarities
+#for i in range(num_descriptions):
+#    for j in range(i + 1, num_descriptions):
+#        running_tally += 1
+#        text1 = LM_database['nlp_desc'][i]
+#        text2 = LM_database['nlp_desc'][j]
+#        value = text1.similarity(text2)
+
+#        if value < min_value:
+#            min_value = value
+#            least_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
+
+#        if value < similarity_threshold:
+#            below_threshold_count += 1
+
+#print(f"Least similar texts have similarity score of {min_value:.2f}")
+#print("Text 1:", least_similar_pair[0])
+#print("Text 2:", least_similar_pair[1])
+#print(f"Total number of pairs: {running_tally}")
+#print(f"Number of pairs with similarity score below {similarity_threshold}: {below_threshold_count}")
+
+# In this section we determine the CTML score of each LM. This score does not depend on individual learners so we can accomplish this task before loading the learner profile
+
+# Capture the LM parameters based on the Cognitive Theory of Multimedia Learning
 
 
 
