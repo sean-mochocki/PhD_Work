@@ -8,6 +8,7 @@ import seaborn as sns
 from sentence_transformers import SentenceTransformer, util
 import matplotlib.pyplot as plt
 import numpy as np
+import pygad
 
 knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
@@ -273,7 +274,7 @@ if correlation_graph:
 # Determine the number of candidate learning materials
 num_LMs = len(LM_database)
 
-run_test = True
+run_test = False
 
 if run_test:
     # Create a random personalized learning path with 0's and 1's
@@ -329,7 +330,7 @@ if run_test:
     # number of goal Knowledge Nodes in KS
     #print("Total number of non-goal coverings", total_covering_non_goals)
     #print("Total number of goal coverings", total_covering_goals)
-    print("Number of goal KNs", len(KS_names))
+    #print("Number of goal KNs", len(KS_names))
 
     balanced_cover_total = 0
 
@@ -338,7 +339,7 @@ if run_test:
         for i in range(len(personalized_learning_path)):
             if personalized_learning_path[i] == 1:
                 if kn in LM_KNs_Covered[i]: num_coverings +=1
-        print("number of coverings for ", kn, "is:", num_coverings)
+        #print("number of coverings for ", kn, "is:", num_coverings)
         balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
         #print("balanced score ", kn, " is ", abs(num_coverings - total_covering_goals / len(KS_names)))
     #    for j in range(len(personalized_learning_path)):
@@ -396,6 +397,152 @@ if run_test:
     print("Average Segmenting", average_segmenting_principle)
     print("Multiple Document Integration Score", multiple_document_principle_average)
 
+print(matching_scores)
+run_GA = True
+if run_GA:
+    gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
+
+    def created_seeded_population(population_size, num_genes):
+        num_seeds = 1
+        # Create the initial population, then randomly choose chromosomes to replace with seeds
+        initial_population = np.random.choice([0, 1], size=(population_size, num_genes), p=[0.5, 0.5])
+
+        seeds = []
+        seed1 = np.zeros(num_genes, dtype=int)
+        for i in range(num_genes):
+            if matching_scores[i] == 1.0: seed1[i] = 1
+        seeds.append(seed1)
+
+        seed2 = np.zeros(num_genes, dtype=int)
+        for i in range(num_genes):
+            if lm_CTML_score[i] >= 3.25: seed2[i] = 1
+        seeds.append(seed2)
+
+        # Add seeds to the population at unique random locations
+        num_seeds_to_add = min(len(seeds), population_size)
+        available_indices = list(range(population_size))  # List of available indices
+        for seed in seeds[:num_seeds_to_add]:
+            if available_indices:  # check to make sure there are still open spots
+                random_index = np.random.choice(available_indices)  # Choose from available indices
+                initial_population[random_index] = seed
+                available_indices.remove(random_index)  # Remove the used index
+
+        return initial_population
+
+    def fitness_func(ga_instance, solution, solution_idx):
+        solution = np.round(solution).astype(int)  # Round and cast to int
+        included_indices = np.where(solution == 1)[0]
+        num_LMs = len(included_indices)
+
+        difficulty_matching_average = np.sum(solution*matching_scores)
+        CTML_average = np.sum(solution*lm_CTML_score)
+        media_matching_average = np.sum(solution*LM_overall_preference_score)
+        total_duration = np.sum(solution*lm_time_taken)
+
+        # Confirm that there is at least 1 LM
+        if num_LMs > 0:
+            difficulty_matching_average = difficulty_matching_average / num_LMs
+            CTML_average = CTML_average / num_LMs
+            media_matching_average = media_matching_average / num_LMs
+        else:
+            difficulty_matching_average = 0
+            CTML_average = 0
+            media_matching_average = 0
+
+        # Use rubric to convert to integer scores
+        LM_Difficulty_Matching = 1
+        CTML_Principle = 1
+        media_matching = 1
+        time_interval_score = 1
+
+        if difficulty_matching_average >= 0.75: LM_Difficulty_Matching = 4
+        if difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
+        if difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
+
+        if CTML_average >= 3.25: CTML_Principle = 4
+        if CTML_average >= 2.5: CTML_Principle = 3
+        if CTML_average >= 1.75: CTML_Principle = 2
+
+        if media_matching_average >= 0.75: media_matching = 4
+        if media_matching_average >= 0.5: media_matching = 3
+        if media_matching_average >= 0.25: media_matching = 2
+
+        if min_time < total_duration < max_time: time_interval_score = 4
+        else:
+            if total_duration < min_time:
+                if 0 < abs(total_duration - min_time) / min_time <= 0.1: time_interval_score = 3
+                elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2: time_interval_score = 2
+                else: time_interval_score = 1
+            if total_duration > max_time:
+                if 0 < abs(total_duration - max_time) / max_time <= 0.1: time_interval_score = 3
+                elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2: time_interval_score = 2
+                else: time_interval_score = 1
+
+        return [difficulty_matching_average]
+
+    num_generations = 80
+    num_parents_mating = 10
+
+    sol_per_pop = 100
+    num_genes = num_LMs
+
+
+    # Use NGSA for multi-objective problems
+    #ga_instance = pygad.GA(num_generations=num_generations,
+    #                       num_parents_mating=num_parents_mating,
+    #                       sol_per_pop=sol_per_pop,
+    #                       num_genes=num_genes,
+    #                       gene_space=gene_space,
+    #                       fitness_func=fitness_func,
+    #                       parent_selection_type='nsga2')
+
+    ga_instance = pygad.GA(num_generations=200,  # Increased generations
+                           num_parents_mating=50,  # Increased parents
+                           sol_per_pop=100,  # Increased population size
+                           num_genes=num_LMs,
+                           gene_space=gene_space,
+                           fitness_func=fitness_func,
+                           parent_selection_type='tournament',  # Changed parent selection
+                           mutation_type='random',  # Changed mutation type
+                           mutation_probability=0.2,  # Adjust mutation probability
+                           crossover_type='two_points',  # Change crossover type
+                           crossover_probability=0.8  # adjust crossover probability
+                           )
+
+
+    ga_instance.run()
+    #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Time Interval Score'])
+
+    solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
+
+    solution = np.round(solution).astype(int)  # Round and cast to int
+
+    num_LMs = np.sum(solution)
+    print(solution)
+    difficulty_matching_average = np.sum(solution * matching_scores)
+    #CTML_average = np.sum(solution * lm_CTML_score) / num_LMs
+    #media_matching_average = np.sum(solution * LM_overall_preference_score) /num_LMs
+    #total_duration = np.sum(solution * lm_time_taken)
+
+    # Confirm that there is at least 1 LM
+    if num_LMs > 0:
+        difficulty_matching_average = difficulty_matching_average / num_LMs
+       # CTML_average = CTML_average / num_LMs
+        #media_matching_average = media_matching_average / num_LMs
+    else:
+        difficulty_matching_average = 0
+        #CTML_average = 0
+        #media_matching_average = 0
+
+    #total_duration = np.sum(solution * lm_time_taken)
+
+    #print(solution)
+    print(f"Difficulty Matching Average based on the best solution : {difficulty_matching_average}")
+    #print(f"CTML Average based on the best solution : {CTML_average}")
+    #print(f"Media Matching Average based on the best solution : {media_matching_average}")
+    #print(f"Time duration average based on the best solution : {total_duration}")
+    #print(f"Parameters of the best solution : {solution}")
+    #print(f"Fitness value of the best solution = {solution_fitness}")
 
     # Print the personalized learning path
     # print("Personalized Learning Path:", personalized_learning_path)
