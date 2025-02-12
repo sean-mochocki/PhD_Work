@@ -112,6 +112,8 @@ for goals in goal_nodes:
 
 # Delete duplicates from the knowledge set
 KS = list(set(KS))
+# Calculate the names of the KNs in KS
+KS_names = [KNs[i] for i in KS]
 
 # Multiply by 100 for convenience when comparing student learning goal times to LM times
 max_time = int(profile_database['maximum_time'][student_profile_id]) * 100
@@ -202,6 +204,25 @@ def calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_di
         scores.append(score)
     return scores
 
+def calculate_kn_coverage(personalized_learning_path, LM_KNs_Covered, KS_names):
+    """Calculates total covering goals and non-goals using NumPy."""
+
+    personalized_learning_path = np.array(personalized_learning_path, dtype=bool)
+
+    covered_kns_list = [LM_KNs_Covered[i] for i, selected in enumerate(personalized_learning_path) if selected]
+
+    if not covered_kns_list:  # Check if the list is empty
+        return 0, 0
+
+    covered_kns = np.concatenate(covered_kns_list)
+
+    is_goal = np.isin(covered_kns, KS_names)
+
+    total_covering_goals = np.sum(is_goal)
+    total_covering_non_goals = len(covered_kns) - total_covering_goals
+
+    return total_covering_goals, total_covering_non_goals
+
 # Calculate the matching scores for all LMs
 matching_scores = calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_dict)
 
@@ -280,7 +301,6 @@ if run_test:
     # Create a random personalized learning path with 0's and 1's
     personalized_learning_path = np.random.choice([0, 1], size=num_LMs, p=[0.5, 0.5])
 
-    KS_names = [KNs[i] for i in KS]
     # In run coherence test we only include LMs that exclusively cover student goal nodes.
 
     # Note, we need to check all KNs to make sure that data is consistent.
@@ -397,16 +417,18 @@ if run_test:
     print("Average Segmenting", average_segmenting_principle)
     print("Multiple Document Integration Score", multiple_document_principle_average)
 
-print(matching_scores)
+#print(matching_scores)
 run_GA = True
 if run_GA:
     gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
+    # Create an initial population composed of random chromosomes and seeds created from single-objective heuristics
     def created_seeded_population(population_size, num_genes):
-        num_seeds = 1
+        #num_seeds = 1
         # Create the initial population, then randomly choose chromosomes to replace with seeds
         initial_population = np.random.choice([0, 1], size=(population_size, num_genes), p=[0.5, 0.5])
 
+        # Create chromosomes that are guaranteed to have optimal scores in single-objective problems
         seeds = []
         seed1 = np.zeros(num_genes, dtype=int)
         for i in range(num_genes):
@@ -417,6 +439,11 @@ if run_GA:
         for i in range(num_genes):
             if lm_CTML_score[i] >= 3.25: seed2[i] = 1
         seeds.append(seed2)
+
+        seed3 = np.zeros(num_genes, dtype=int)
+        for i in range(num_genes):
+            if LM_overall_preference_score[i] >= 0.75: seed3[i] = 1
+        seeds.append(seed3)
 
         # Add seeds to the population at unique random locations
         num_seeds_to_add = min(len(seeds), population_size)
@@ -456,16 +483,39 @@ if run_GA:
         time_interval_score = 1
 
         if difficulty_matching_average >= 0.75: LM_Difficulty_Matching = 4
-        if difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
-        if difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
+        elif difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
+        elif difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
 
         if CTML_average >= 3.25: CTML_Principle = 4
-        if CTML_average >= 2.5: CTML_Principle = 3
-        if CTML_average >= 1.75: CTML_Principle = 2
+        elif CTML_average >= 2.5: CTML_Principle = 3
+        elif CTML_average >= 1.75: CTML_Principle = 2
 
         if media_matching_average >= 0.75: media_matching = 4
-        if media_matching_average >= 0.5: media_matching = 3
-        if media_matching_average >= 0.25: media_matching = 2
+        elif media_matching_average >= 0.5: media_matching = 3
+        elif media_matching_average >= 0.25: media_matching = 2
+
+        total_covering_goals, total_covering_non_goals= calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
+
+        average_coherence = total_covering_non_goals / num_LMs if num_LMs > 0 else 0
+
+        coherence_principle = 1
+        if average_coherence <= 0.25: coherence_principle = 4
+        elif average_coherence <= 0.5: coherence_principle = 3
+        elif average_coherence <= 1.0: coherence_principle = 2
+
+        multiple_document_principle_average = total_covering_goals / len(KS_names)
+        average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / num_LMs if num_LMs > 0 else 0
+
+        segmenting_principle = 1
+        if average_segmenting_principle <= 2: segmenting_principle = 4
+        elif average_segmenting_principle <= 3: segmenting_principle = 3
+        elif average_segmenting_principle <= 4: segmenting_principle = 2
+
+        #if min_time < total_duration < max_time: time_interval_score = 1.0
+        #elif total_duration < min_time:
+        #    time_interval_score = total_duration - min_time
+        #else: time_interval_score = max_time - total_duration
+        #else: time_interval_score = -abs(total_duration - (min_time + max_time) / 2)  # Negative absolute difference from midpoint
 
         if min_time < total_duration < max_time: time_interval_score = 4
         else:
@@ -478,12 +528,12 @@ if run_GA:
                 elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2: time_interval_score = 2
                 else: time_interval_score = 1
 
-        return [difficulty_matching_average]
+        return [LM_Difficulty_Matching, CTML_Principle, media_matching, time_interval_score, coherence_principle, segmenting_principle]
 
-    num_generations = 80
-    num_parents_mating = 10
-
-    sol_per_pop = 100
+    # GA Parameters
+    num_generations = 50
+    num_parents_mating = 50
+    sol_per_pop = 250
     num_genes = num_LMs
 
 
@@ -496,33 +546,35 @@ if run_GA:
     #                       fitness_func=fitness_func,
     #                       parent_selection_type='nsga2')
 
-    ga_instance = pygad.GA(num_generations=200,  # Increased generations
-                           num_parents_mating=50,  # Increased parents
-                           sol_per_pop=100,  # Increased population size
-                           num_genes=num_LMs,
+    ga_instance = pygad.GA(num_generations=num_generations,  # Increased generations
+                           num_parents_mating=num_parents_mating,  # Increased parents
+                           sol_per_pop=sol_per_pop,  # Increased population size
+                           num_genes=num_genes,
                            gene_space=gene_space,
+                           initial_population=created_seeded_population(sol_per_pop, num_genes),
                            fitness_func=fitness_func,
-                           parent_selection_type='tournament',  # Changed parent selection
-                           mutation_type='random',  # Changed mutation type
-                           mutation_probability=0.2,  # Adjust mutation probability
+                           parent_selection_type='nsga2',  # Changed parent selection
+                           mutation_type='scramble',  # Changed mutation type
+                           mutation_probability=0.5,  # Adjust mutation probability
                            crossover_type='two_points',  # Change crossover type
                            crossover_probability=0.8  # adjust crossover probability
                            )
 
 
     ga_instance.run()
-    #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Time Interval Score'])
+    ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Time Interval Score',
+                                    'Coherence Principle', 'Segmenting Principle'])
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
 
     solution = np.round(solution).astype(int)  # Round and cast to int
 
     num_LMs = np.sum(solution)
-    print(solution)
+    #print(solution)
     difficulty_matching_average = np.sum(solution * matching_scores)
-    #CTML_average = np.sum(solution * lm_CTML_score) / num_LMs
-    #media_matching_average = np.sum(solution * LM_overall_preference_score) /num_LMs
-    #total_duration = np.sum(solution * lm_time_taken)
+    CTML_average = np.sum(solution * lm_CTML_score) / num_LMs
+    media_matching_average = np.sum(solution * LM_overall_preference_score) /num_LMs
+    total_duration = np.sum(solution * lm_time_taken)
 
     # Confirm that there is at least 1 LM
     if num_LMs > 0:
@@ -537,12 +589,12 @@ if run_GA:
     #total_duration = np.sum(solution * lm_time_taken)
 
     #print(solution)
-    print(f"Difficulty Matching Average based on the best solution : {difficulty_matching_average}")
-    #print(f"CTML Average based on the best solution : {CTML_average}")
-    #print(f"Media Matching Average based on the best solution : {media_matching_average}")
-    #print(f"Time duration average based on the best solution : {total_duration}")
-    #print(f"Parameters of the best solution : {solution}")
-    #print(f"Fitness value of the best solution = {solution_fitness}")
+    #print(f"Difficulty Matching Average based on the best solution : {difficulty_matching_average}")
+    print(f"CTML Average based on the best solution : {CTML_average}")
+    print(f"Media Matching Average based on the best solution : {media_matching_average}")
+    print(f"Time duration average based on the best solution : {total_duration}")
+    print(f"Parameters of the best solution : {solution}")
+    print(f"Fitness value of the best solution = {solution_fitness}")
 
     # Print the personalized learning path
     # print("Personalized Learning Path:", personalized_learning_path)
@@ -550,6 +602,10 @@ if run_GA:
     # Print the scores
     #for i, score in enumerate(matching_scores):
     #    if score != 0: print(f"LM {i+1} has a matching score of {score:.3f}")
+
+    pareto_front = ga_instance.best_solutions
+    print("The length of the pareto front is: ", len(pareto_front))
+
 
     # Example lookup
     #KN = 'Speech Processing'
@@ -561,6 +617,8 @@ if run_GA:
     # Print the students goal nodes.
     #for node in KS:
     #    print(KG.vs[node]['name'])
+
+
 
     # Visualize the Graph
     #layout = KG.layout_fruchterman_reingold(grid="nogrid")
