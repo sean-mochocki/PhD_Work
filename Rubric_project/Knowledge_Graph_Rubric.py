@@ -39,6 +39,9 @@ LM_database['Time to Complete'] = LM_database['Time to Complete'].str.split(":")
 lm_time_taken = LM_database['Time to Complete'].to_numpy()
 lm_time_taken = [int(x * 100) for x in lm_time_taken]
 
+# Find the global max time for all LMs
+global_max_time = np.sum(lm_time_taken)
+
 # Get Sentence Transformer model to be used to calculate cohesiveness
 model = SentenceTransformer('all-mpnet-base-v2')
 LM_database['embeddings'] = LM_database['Description'].apply(lambda x: model.encode(x, convert_to_tensor=True))
@@ -115,9 +118,13 @@ KS = list(set(KS))
 # Calculate the names of the KNs in KS
 KS_names = [KNs[i] for i in KS]
 
+
+
 # Multiply by 100 for convenience when comparing student learning goal times to LM times
 max_time = int(profile_database['maximum_time'][student_profile_id]) * 100
 min_time = int(profile_database['minimum_time'][student_profile_id]) * 100
+
+
 
 # Get the first element of the column as a string
 cog_levels_str = profile_database['cognitive_levels'][student_profile_id]
@@ -183,6 +190,42 @@ KN_cog_level_dict = dict(zip(KNs, cog_levels_list))
 # Define the many-to-one relationship between LMs and KNs.
 LM_KNs_Covered = LM_database['KNs Covered']
 
+def max_non_goal_kns_covered(KS_names, LM_KNs_Covered):
+    """
+    Finds the maximum number of non-goal KNs covered by a single LM.
+
+    Args:
+        KS_names: A list of goal KN names (strings).
+        LM_KNs_Covered: A list of lists or Series, where each inner list contains
+                       the KN names (strings) covered by a specific LM.
+
+    Returns:
+        The maximum number of non-goal KNs covered by a single LM (integer).
+        Returns 0 if LM_KNs_Covered is empty or if no non-goal KNs are found.
+    """
+
+    max_non_goal_count = 0
+
+    if LM_KNs_Covered.empty: # Check for empty list
+        return 0
+
+    for kns_covered_by_lm in LM_KNs_Covered:
+        if isinstance(kns_covered_by_lm, pd.Series): # Check if it is a pandas series
+            kns_covered_by_lm = kns_covered_by_lm.to_numpy() # convert to numpy array
+
+        non_goal_count = 0
+        for kn in kns_covered_by_lm:
+            if kn not in KS_names:
+                non_goal_count += 1
+        max_non_goal_count = max(max_non_goal_count, non_goal_count)
+
+    return max_non_goal_count
+
+
+# Example Usage (assuming KS_names and LM_KNs_Covered are defined as you described):
+max_non_goals = max_non_goal_kns_covered(KS_names, LM_KNs_Covered)
+#print(f"Maximum non-goal KNs covered by a single LM: {max_non_goals}")
+
 # This function calculates the difficulty matching score of LMs to learner CLs. In the case that a LM only covers 1
 #
 def calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_dict):
@@ -222,6 +265,9 @@ def calculate_kn_coverage(personalized_learning_path, LM_KNs_Covered, KS_names):
     total_covering_non_goals = len(covered_kns) - total_covering_goals
 
     return total_covering_goals, total_covering_non_goals
+
+# Calculate the worst average coherence value
+
 
 # Calculate the matching scores for all LMs
 matching_scores = calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_dict)
@@ -456,17 +502,41 @@ if run_GA:
 
         return initial_population
 
+    # Note - the PLP function is getting caught in local minima and is having trouble converging because using the rubric is too stringent.
+    # The right path forward is to normalize the categories between 0 and 1, where 1 is good and 0 is bad, and this would allow
+    # The GA to explore the space more thoroughly. We need it to be the case that minor changes in the Chromosomes create measurably different PLPs.
+    # If we do this and we get a pareto front, we could then grade the pareto front according to the rubric and return the front with the best
+    # average metrics to the learner.
+
     def fitness_func(ga_instance, solution, solution_idx):
         solution = np.round(solution).astype(int)  # Round and cast to int
         included_indices = np.where(solution == 1)[0]
         num_LMs = len(included_indices)
 
+
         difficulty_matching_average = np.sum(solution*matching_scores)
         CTML_average = np.sum(solution*lm_CTML_score)
         media_matching_average = np.sum(solution*LM_overall_preference_score)
-        total_duration = np.sum(solution*lm_time_taken)
 
-        # Confirm that there is at least 1 LM
+
+        total_duration = np.sum(solution*lm_time_taken)
+        min_time_compliance = 0.0
+        max_time_compliance = 0.0
+
+        if min_time <= total_duration <= max_time:
+            min_time_compliance = 1.0
+            max_time_compliance = 1.0
+        elif total_duration < min_time:
+            max_time_compliance = 1.0
+            min_time_compliance = 1.0 - (abs(min_time -total_duration) / min_time)
+        elif total_duration > max_time:
+            min_time_compliance = 1.0
+            max_time_compliance = 1.0 - abs(max_time - total_duration) / (global_max_time - max_time)
+
+        min_time_compliance = max(0.0, min(1.0, min_time_compliance))
+        max_time_compliance = max(0.0, min(1.0, max_time_compliance))
+
+        # Normalize difficulty_matching_average, CTML_average, and media_matching_average for [0,1]
         if num_LMs > 0:
             difficulty_matching_average = difficulty_matching_average / num_LMs
             CTML_average = CTML_average / num_LMs
@@ -476,40 +546,53 @@ if run_GA:
             CTML_average = 0
             media_matching_average = 0
 
-        # Use rubric to convert to integer scores
-        LM_Difficulty_Matching = 1
-        CTML_Principle = 1
-        media_matching = 1
-        time_interval_score = 1
+        CTML_average_normalized = (CTML_average -1) / (4.0 -1.0)
 
-        if difficulty_matching_average >= 0.75: LM_Difficulty_Matching = 4
-        elif difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
-        elif difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
+        difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
+        CTML_average_normalized = max(0.0, min(1.0, CTML_average_normalized))
+        media_matching_average = max(0.0, min(1.0, media_matching_average))
 
-        if CTML_average >= 3.25: CTML_Principle = 4
-        elif CTML_average >= 2.5: CTML_Principle = 3
-        elif CTML_average >= 1.75: CTML_Principle = 2
+        # # Use rubric to convert to integer scores
+        # LM_Difficulty_Matching = 1
+        # CTML_Principle = 1
+        # media_matching = 1
+        # time_interval_score = 1
+        #
+        # if difficulty_matching_average >= 0.75: LM_Difficulty_Matching = 4
+        # elif difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
+        # elif difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
+        #
+        # if CTML_average >= 3.25: CTML_Principle = 4
+        # elif CTML_average >= 2.5: CTML_Principle = 3
+        # elif CTML_average >= 1.75: CTML_Principle = 2
+        #
+        # if media_matching_average >= 0.75: media_matching = 4
+        # elif media_matching_average >= 0.5: media_matching = 3
+        # elif media_matching_average >= 0.25: media_matching = 2
 
-        if media_matching_average >= 0.75: media_matching = 4
-        elif media_matching_average >= 0.5: media_matching = 3
-        elif media_matching_average >= 0.25: media_matching = 2
+        total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
 
-        total_covering_goals, total_covering_non_goals= calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
+        average_coherence = (total_covering_non_goals / num_LMs) if num_LMs > 0 else 0
 
-        average_coherence = total_covering_non_goals / num_LMs if num_LMs > 0 else 0
+        if max_non_goals == 0:  # Handle the case where max_non_goals is 0
+            normalized_average_coherence = 1.0 if average_coherence == 0 else 0.0  # Perfect coherence if no non-goals
+        else:
+            normalized_average_coherence = 1.0 - (average_coherence / max_non_goals)
 
-        coherence_principle = 1
-        if average_coherence <= 0.25: coherence_principle = 4
-        elif average_coherence <= 0.5: coherence_principle = 3
-        elif average_coherence <= 1.0: coherence_principle = 2
+        normalized_average_coherence = max(0.0, min(1.0, normalized_average_coherence))
+
+        # coherence_principle = 1
+        # if average_coherence <= 0.25: coherence_principle = 4
+        # elif average_coherence <= 0.5: coherence_principle = 3
+        # elif average_coherence <= 1.0: coherence_principle = 2
 
         multiple_document_principle_average = total_covering_goals / len(KS_names)
         average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / num_LMs if num_LMs > 0 else 0
 
-        segmenting_principle = 1
-        if average_segmenting_principle <= 2: segmenting_principle = 4
-        elif average_segmenting_principle <= 3: segmenting_principle = 3
-        elif average_segmenting_principle <= 4: segmenting_principle = 2
+        # segmenting_principle = 1
+        # if average_segmenting_principle <= 2: segmenting_principle = 4
+        # elif average_segmenting_principle <= 3: segmenting_principle = 3
+        # elif average_segmenting_principle <= 4: segmenting_principle = 2
 
         #if min_time < total_duration < max_time: time_interval_score = 1.0
         #elif total_duration < min_time:
@@ -517,22 +600,23 @@ if run_GA:
         #else: time_interval_score = max_time - total_duration
         #else: time_interval_score = -abs(total_duration - (min_time + max_time) / 2)  # Negative absolute difference from midpoint
 
-        if min_time < total_duration < max_time: time_interval_score = 4
-        else:
-            if total_duration < min_time:
-                if 0 < abs(total_duration - min_time) / min_time <= 0.1: time_interval_score = 3
-                elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2: time_interval_score = 2
-                else: time_interval_score = 1
-            if total_duration > max_time:
-                if 0 < abs(total_duration - max_time) / max_time <= 0.1: time_interval_score = 3
-                elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2: time_interval_score = 2
-                else: time_interval_score = 1
+        # if min_time < total_duration < max_time: time_interval_score = 4
+        # else:
+        #     if total_duration < min_time:
+        #         if 0 < abs(total_duration - min_time) / min_time <= 0.1: time_interval_score = 3
+        #         elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2: time_interval_score = 2
+        #         else: time_interval_score = 1
+        #     if total_duration > max_time:
+        #         if 0 < abs(total_duration - max_time) / max_time <= 0.1: time_interval_score = 3
+        #         elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2: time_interval_score = 2
+        #         else: time_interval_score = 1
 
-        return [LM_Difficulty_Matching, CTML_Principle, media_matching, time_interval_score, coherence_principle, segmenting_principle]
+        return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
+                min_time_compliance, normalized_average_coherence]
 
     # GA Parameters
-    num_generations = 50
-    num_parents_mating = 50
+    num_generations = 200
+    num_parents_mating = 100
     sol_per_pop = 250
     num_genes = num_LMs
 
@@ -555,15 +639,15 @@ if run_GA:
                            fitness_func=fitness_func,
                            parent_selection_type='nsga2',  # Changed parent selection
                            mutation_type='scramble',  # Changed mutation type
-                           mutation_probability=0.5,  # Adjust mutation probability
+                           mutation_probability=0.1,  # Adjust mutation probability
                            crossover_type='two_points',  # Change crossover type
-                           crossover_probability=0.8  # adjust crossover probability
+                           crossover_probability=0.2  # adjust crossover probability
                            )
 
 
     ga_instance.run()
-    ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Time Interval Score',
-                                    'Coherence Principle', 'Segmenting Principle'])
+    ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
+                                    'Min Time Compliance', 'Normalized Average Coherence'])
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
 
@@ -589,7 +673,7 @@ if run_GA:
     #total_duration = np.sum(solution * lm_time_taken)
 
     #print(solution)
-    #print(f"Difficulty Matching Average based on the best solution : {difficulty_matching_average}")
+    print(f"Difficulty Matching Average based on the best solution : {difficulty_matching_average}")
     print(f"CTML Average based on the best solution : {CTML_average}")
     print(f"Media Matching Average based on the best solution : {media_matching_average}")
     print(f"Time duration average based on the best solution : {total_duration}")
@@ -603,7 +687,7 @@ if run_GA:
     #for i, score in enumerate(matching_scores):
     #    if score != 0: print(f"LM {i+1} has a matching score of {score:.3f}")
 
-    pareto_front = ga_instance.best_solutions
+    pareto_front = ga_instance.pareto_fronts
     print("The length of the pareto front is: ", len(pareto_front))
 
 
