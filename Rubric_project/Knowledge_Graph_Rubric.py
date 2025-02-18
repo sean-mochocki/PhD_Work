@@ -224,8 +224,9 @@ def max_non_goal_kns_covered(KS_names, LM_KNs_Covered):
 
 # Example Usage (assuming KS_names and LM_KNs_Covered are defined as you described):
 max_non_goals = max_non_goal_kns_covered(KS_names, LM_KNs_Covered)
-#print(f"Maximum non-goal KNs covered by a single LM: {max_non_goals}")
 
+#Identify the most KNs covered by any individual LM
+average_segmenting_max = max_non_goal_kns_covered([], LM_KNs_Covered)
 # This function calculates the difficulty matching score of LMs to learner CLs. In the case that a LM only covers 1
 #
 def calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_dict):
@@ -266,7 +267,31 @@ def calculate_kn_coverage(personalized_learning_path, LM_KNs_Covered, KS_names):
 
     return total_covering_goals, total_covering_non_goals
 
-# Calculate the worst average coherence value
+def normalize_segmenting(average_segmenting_principle, average_segmenting_max, num_LMs):
+    """Normalizes segmenting score, handling the all-1-KNs case."""
+
+    if average_segmenting_max == 0:  # Handle max = 0 case (no KNs covered at all)
+        if average_segmenting_principle == 1:
+            return 1.0  # Perfect score if max is 0 and average is 1
+        else:
+            return 0.0  # Error if max is 0 and average is not 1
+
+    if average_segmenting_max == 1 and num_LMs > 0:  # All LMs cover only 1 KN
+        return 1.0  # Perfect score in this many-to-one scenario
+
+    normalized_segmenting = 1.0 - ((average_segmenting_principle - 1.0) / (average_segmenting_max - 1.0))
+
+    normalized_segmenting = max(0.0, min(1.0, normalized_segmenting))  # Clip to [0, 1] (Good practice)
+
+    return normalized_segmenting
+
+
+#Calculate the max average Multiple Document Integration Principle Score
+personalized_learning_path = np.ones(len(LM_database), dtype=int)  # Creates an array of 1s (integers)
+total_covering_goals, total_covering_non_goals = calculate_kn_coverage(personalized_learning_path, LM_KNs_Covered, KS_names)
+max_average_MDIP = total_covering_goals/ (len(KS_names))
+
+
 
 
 # Calculate the matching scores for all LMs
@@ -513,7 +538,6 @@ if run_GA:
         included_indices = np.where(solution == 1)[0]
         num_LMs = len(included_indices)
 
-
         difficulty_matching_average = np.sum(solution*matching_scores)
         CTML_average = np.sum(solution*lm_CTML_score)
         media_matching_average = np.sum(solution*LM_overall_preference_score)
@@ -586,8 +610,14 @@ if run_GA:
         # elif average_coherence <= 0.5: coherence_principle = 3
         # elif average_coherence <= 1.0: coherence_principle = 2
 
-        multiple_document_principle_average = total_covering_goals / len(KS_names)
+        MDIP_average = total_covering_goals / len(KS_names)
+        normalized_MDIP = MDIP_average / max_average_MDIP
+        normalized_MDIP = max(0.0, min(1.0, normalized_MDIP))
+
         average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / num_LMs if num_LMs > 0 else 0
+        normalized_segmenting = 0
+
+        normalized_segmenting = normalize_segmenting(average_segmenting_principle, average_segmenting_max, num_LMs)
 
         # segmenting_principle = 1
         # if average_segmenting_principle <= 2: segmenting_principle = 4
@@ -612,12 +642,12 @@ if run_GA:
         #         else: time_interval_score = 1
 
         return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
-                min_time_compliance, normalized_average_coherence]
+                min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting]
 
     # GA Parameters
     num_generations = 200
     num_parents_mating = 100
-    sol_per_pop = 250
+    sol_per_pop = 100
     num_genes = num_LMs
 
 
@@ -647,7 +677,7 @@ if run_GA:
 
     ga_instance.run()
     ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
-                                    'Min Time Compliance', 'Normalized Average Coherence'])
+                                    'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting'])
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
 
