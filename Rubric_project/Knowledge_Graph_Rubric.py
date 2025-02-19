@@ -9,6 +9,8 @@ from sentence_transformers import SentenceTransformer, util
 import matplotlib.pyplot as plt
 import numpy as np
 import pygad
+import torch
+import math
 
 knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
@@ -45,6 +47,37 @@ global_max_time = np.sum(lm_time_taken)
 # Get Sentence Transformer model to be used to calculate cohesiveness
 model = SentenceTransformer('all-mpnet-base-v2')
 LM_database['embeddings'] = LM_database['Description'].apply(lambda x: model.encode(x, convert_to_tensor=True))
+
+def calculate_cohesiveness(personalized_learning_path, LM_database):
+    """Calculates cohesiveness efficiently using vectorized operations."""
+
+    num_LMs = len(personalized_learning_path)  # Get total number of LMs
+    included_indices = [i for i in range(num_LMs) if personalized_learning_path[i] == 1]
+    included_embeddings = [LM_database['embeddings'][i] for i in included_indices]
+
+    num_included_LMs = len(included_embeddings)
+
+    if num_included_LMs < 2:  # Handle the case of 0 or 1 included LMs
+        return 0.0
+
+    # Convert list of tensors to a single tensor
+    included_embeddings_tensor = torch.stack(included_embeddings)
+
+    # Efficiently calculate all pairwise cosine similarities
+    similarity_matrix = util.pytorch_cos_sim(included_embeddings_tensor, included_embeddings_tensor)
+
+    # Zero out the diagonal (self-similarities) and upper triangle (redundant)
+    mask = torch.ones_like(similarity_matrix, dtype=torch.bool).triu(diagonal=1)
+    similarity_matrix = similarity_matrix.masked_fill(mask, 0.0)
+
+    # Calculate the sum of the remaining (lower triangle) similarities
+    total_similarity = similarity_matrix.sum().item()
+
+    count = num_included_LMs * (num_included_LMs - 1) / 2 # Number of pairs
+
+    average_cohesiveness = (total_similarity + count) / count if count > 0 else 0.0 # Normalized score
+
+    return average_cohesiveness
 
 # Calculate the CTML score of each LM
 lm_Multimedia_score = LM_database['Multimedia Principle']
@@ -291,8 +324,45 @@ personalized_learning_path = np.ones(len(LM_database), dtype=int)  # Creates an 
 total_covering_goals, total_covering_non_goals = calculate_kn_coverage(personalized_learning_path, LM_KNs_Covered, KS_names)
 max_average_MDIP = total_covering_goals/ (len(KS_names))
 
+# Create a boolean matrix where rows are learning path items and columns are KS_names to speed up topic balance calculations
+# True indicates that the KS is covered by the learning path item
+max_len = max(len(lst) for lst in LM_KNs_Covered)  # find the largest list in LM_KNs_Covered
+covered_matrix = np.zeros((len(LM_KNs_Covered), len(KS_names)), dtype=bool)
+for i, kn_list in enumerate(LM_KNs_Covered):
+    for j, kn in enumerate(KS_names):
+        if kn in kn_list:
+            covered_matrix[i, j] = True
 
+def check_kn_coverage(solution, LM_KNs_Covered, KS_names):
+    """Checks if all KNs are covered by at least one LM in the solution."""
 
+    num_ks = len(KS_names)
+    covered_kns = set()  # Use a set for efficient checking of covered KNs
+
+    for i, lm_included in enumerate(solution):
+        if lm_included == 1:  # If the LM is included in the solution
+            for kn in LM_KNs_Covered[i]:  # Iterate through KNs covered by this LM
+                covered_kns.add(kn)
+
+    return len(covered_kns) == num_ks  # Return True if all KNs are covered
+
+def calculate_balanced_cover(personalized_learning_path, LM_KNs_Covered, KS_names, total_covering_goals):
+    """Calculates balanced cover using NumPy for efficiency."""
+    personalized_learning_path = np.array(personalized_learning_path)  # Convert to NumPy array
+    KS_names = np.array(KS_names)  # Convert to NumPy array
+    num_kn = len(KS_names)
+    covering_counts = np.zeros(num_kn)
+    # Efficiently count coverings using boolean indexing and summing
+    active_path_indices = np.where(personalized_learning_path == 1)[0]
+    #covering_counts is an array composed of integers that represent how many LMs cover each KN in KS
+    covering_counts = np.sum(covered_matrix[active_path_indices], axis=0)
+
+    # Calculate balanced cover using NumPy's vectorized operations
+    ideal_cover = total_covering_goals / num_kn
+    balanced_cover_total = np.sum(np.abs(covering_counts - ideal_cover))
+
+    average_balanced_cover = balanced_cover_total / num_kn
+    return average_balanced_cover
 
 # Calculate the matching scores for all LMs
 matching_scores = calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_dict)
@@ -363,135 +433,33 @@ if correlation_graph:
 
 # Show the plot
 
-# Determine the number of candidate learning materials
-num_LMs = len(LM_database)
 
-run_test = False
 
-if run_test:
-    # Create a random personalized learning path with 0's and 1's
-    personalized_learning_path = np.random.choice([0, 1], size=num_LMs, p=[0.5, 0.5])
 
-    # In run coherence test we only include LMs that exclusively cover student goal nodes.
-
-    # Note, we need to check all KNs to make sure that data is consistent.
-    run_coherence_test = True
-    if run_coherence_test:
-        # Select LMs that only cover goal KNs
-        for i in range(num_LMs):
-            #print(f"Checking LM_KNs_Covered[{i}]: {LM_KNs_Covered[i]}")
-            if any(kn in KS_names for kn in LM_KNs_Covered[i]):
-                #print(LM_KNs_Covered[i])
-                personalized_learning_path[i] = 1
-            else:
-                personalized_learning_path[i] = 0
-
-    # Initialize variables
-    total_difficulty_score = 0
-    #total_media_score is the average of LM_media_match and flipped_preference_score
-    total_LM_media_match = 0
-    total_flipped_preference_score = 0
-    total_media_score = 0
-    total_CTML_score =0
-    total_time = 0
-    count = 0
-    total_covering_non_goals = 0
-    total_covering_goals = 0
-
-    # Convert KS to a list of strings based on KNs
-    # LM_KNs_Covered - a list of lists of the Knowledge Nodes covered by each Learning Material
-    # Goal - iterate through all LMs and add up the number of coverings of KNs performed by LMs that are not goal nodes.
-
-    # Iterate through the candidate learning path and match scores
-    for i in range(len(personalized_learning_path)):
-        if personalized_learning_path[i] == 1:
-            # Add up the number of non-goal KNs covered by learning material
-            for kn in LM_KNs_Covered[i]:
-                if kn not in KS_names: total_covering_non_goals += 1
-                else: total_covering_goals += 1
-            total_media_score += LM_overall_preference_score[i]
-            total_LM_media_match += LM_media_match[i]
-            total_flipped_preference_score += flipped_preference_score[i]
-            total_difficulty_score += matching_scores[i]
-            total_CTML_score += lm_CTML_score[i]
-            total_time += lm_time_taken[i]
-            count += 1
-
-    # Begin Balanced Cover Section
-    # number of goal Knowledge Nodes in KS
-    #print("Total number of non-goal coverings", total_covering_non_goals)
-    #print("Total number of goal coverings", total_covering_goals)
-    #print("Number of goal KNs", len(KS_names))
-
-    balanced_cover_total = 0
-
-    for kn in KS_names:
-        num_coverings = 0
-        for i in range(len(personalized_learning_path)):
-            if personalized_learning_path[i] == 1:
-                if kn in LM_KNs_Covered[i]: num_coverings +=1
-        #print("number of coverings for ", kn, "is:", num_coverings)
-        balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
-        #print("balanced score ", kn, " is ", abs(num_coverings - total_covering_goals / len(KS_names)))
-    #    for j in range(len(personalized_learning_path)):
-    #print("Balanced Cover is: ", balanced_cover_total)
-    print("Average Balanced Cover is: ", balanced_cover_total / len(KS_names))
-    # End Balanced Cover Section
-
-    if total_time > max_time:
-        print("PLP exceeds max time by", ((total_time - max_time) / max_time) * 100, "percent")
-    elif total_time < min_time:
-        print("PLP is less than min time by", ((min_time - total_time) / min_time) * 100, "percent")
-    else:
-        print("PLP is within the student time constraints.")
-
-    # Calculate average matching score
-    average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
-    average_media_preference_score = total_media_score / count if count > 0 else 0
-    average_CTML_score = total_CTML_score / count if count > 0 else 0
-    average_LM_media_match = total_LM_media_match / count if count > 0 else 0
-    average_preference = total_flipped_preference_score / count if count > 0 else 0
-    average_coherence = total_covering_non_goals / count if count > 0 else 0
-    multiple_document_principle_average = total_covering_goals / len(KS_names)
-    average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
-
-    # calculate the average cohesiveness of the PLP
-    # Filter the embeddings of included learning materials
-    included_embeddings = [LM_database['embeddings'][i] for i in range(num_LMs) if personalized_learning_path[i] == 1]
-
-    num_included_LMs = len(included_embeddings)
-    total_similarity = 0
-    count = 0
-
-    for i in range(num_included_LMs):
-        for j in range(i + 1, num_included_LMs):
-            similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
-            normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
-            total_similarity += normalized_similarity
-            count += 1
-
-    average_cohesiveness = total_similarity / count if count > 0 else 0
-
-    # End section to calculate cohesiveness
-
-    # Print the personalized learning path and the average matching score
-    #print("Personalized Learning Path:", personalized_learning_path)
-    print("Total number of LMs is:", num_included_LMs)
-    print("Average Difficulty Matching Score:", average_difficulty_matching_score)
-    print("Average Overall Media Matching Score", average_media_preference_score)
-    print("Average LM Media Matching Score", average_LM_media_match)
-    print("Average LM Preference Matching Score", average_preference)
-    print("Average CTML Score", average_CTML_score)
-    print("Average Cohesiveness:", average_cohesiveness)
-    print("Total Time Taken", total_time)
-    print("Average Coherence", average_coherence)
-    print("Average Segmenting", average_segmenting_principle)
-    print("Multiple Document Integration Score", multiple_document_principle_average)
 
 #print(matching_scores)
 run_GA = True
 if run_GA:
     gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
+
+    def generate_initial_population(population_size, num_genes, LM_KNs_Covered, KS_names):
+        """Generates an initial population where all solutions satisfy KN coverage."""
+        num_ks = len(KS_names)
+        population = []
+        while len(population) < population_size:
+            solution = np.random.randint(0, 2, len(LM_database))  # Generate a random solution (0s and 1s)
+            covered_kns = set()
+            for i, lm_included in enumerate(solution):
+                if lm_included == 1:
+                    for kn in LM_KNs_Covered[i]:
+                        covered_kns.add(kn)
+
+            if len(covered_kns) == num_ks:  # Check if all KNs are covered
+                population.append(solution)
+                print("Adding chromosome:", len(population))
+            # If the constraint isn't met, the while loop continues to generate a new random solution
+        print("Initial population is complete")
+        return np.array(population)  # Important: Convert the list to a NumPy array
 
     # Create an initial population composed of random chromosomes and seeds created from single-objective heuristics
     def created_seeded_population(population_size, num_genes):
@@ -538,29 +506,56 @@ if run_GA:
         included_indices = np.where(solution == 1)[0]
         num_LMs = len(included_indices)
 
+        # Ensure that each goal KN is covered by at least 1 LM
+        if not check_kn_coverage(solution, LM_KNs_Covered, KS_names):
+            difficulty_matching_average = -1
+            CTML_average_normalized = -1
+            media_matching_average = -1
+            max_time_compliance = -1
+            min_time_compliance = -1
+            normalized_average_coherence = -1
+            normalized_MDIP = -1
+            normalized_segmenting = -1
+            normalized_average_balanced_cover = -1
+            return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
+                    min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting,
+                    normalized_average_balanced_cover]
+
         difficulty_matching_average = np.sum(solution*matching_scores)
         CTML_average = np.sum(solution*lm_CTML_score)
         media_matching_average = np.sum(solution*LM_overall_preference_score)
-
 
         total_duration = np.sum(solution*lm_time_taken)
         min_time_compliance = 0.0
         max_time_compliance = 0.0
 
-        if min_time <= total_duration <= max_time:
+        #if min_time <= total_duration <= max_time:
+        #    min_time_compliance = 1.0
+        #    max_time_compliance = 1.0
+        #elif total_duration < min_time:
+        #    max_time_compliance = 1.0
+        #    min_time_compliance = 1.0 - (abs(min_time -total_duration) / min_time)
+        #elif total_duration > max_time:
+        #    min_time_compliance = 1.0
+        #    max_time_compliance = 1.0 - abs(max_time - total_duration) / (global_max_time - max_time)
+
+        if total_duration < Rubric_min_time or total_duration > Rubric_max_time:
+            min_time_compliance = 0.0
+            max_time_compliance = 0.0
+        elif min_time <= total_duration <= max_time:
             min_time_compliance = 1.0
             max_time_compliance = 1.0
-        elif total_duration < min_time:
+        elif total_duration < min_time:  # Now within rubric range but below min_time
+            min_time_compliance = 1.0 - (abs(min_time - total_duration) / abs(Rubric_min_time - min_time)) if Rubric_min_time != min_time else 0.0
             max_time_compliance = 1.0
-            min_time_compliance = 1.0 - (abs(min_time -total_duration) / min_time)
-        elif total_duration > max_time:
+        elif total_duration > max_time:  # Now within rubric range but above max_time
             min_time_compliance = 1.0
-            max_time_compliance = 1.0 - abs(max_time - total_duration) / (global_max_time - max_time)
+            max_time_compliance = 1.0 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
 
         min_time_compliance = max(0.0, min(1.0, min_time_compliance))
         max_time_compliance = max(0.0, min(1.0, max_time_compliance))
 
-        # Normalize difficulty_matching_average, CTML_average, and media_matching_average for [0,1]
+        # Normalize difficulty_matching_average, CTML_average, and media_matching_average for [0,1] - penalize these scores if there are no LMs in solution
         if num_LMs > 0:
             difficulty_matching_average = difficulty_matching_average / num_LMs
             CTML_average = CTML_average / num_LMs
@@ -575,6 +570,10 @@ if run_GA:
         difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
         CTML_average_normalized = max(0.0, min(1.0, CTML_average_normalized))
         media_matching_average = max(0.0, min(1.0, media_matching_average))
+
+
+        #average_cohesiveness = calculate_cohesiveness(solution, LM_database)
+        #average_cohesiveness = max(0.0, min(1.0, average_cohesiveness))
 
         # # Use rubric to convert to integer scores
         # LM_Difficulty_Matching = 1
@@ -596,12 +595,27 @@ if run_GA:
 
         total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
 
+
+        # Find the max_average_balanced_cover is likely an NP-complete problem. We're using the rubric here to cap this score
+        # But futuristically we would want to find this number dynamically
+        max_average_balanced_cover = 5
+        average_balanced_cover = calculate_balanced_cover(solution, LM_KNs_Covered, KS_names, total_covering_goals)
+        normalized_average_balanced_cover = 0
+        if average_balanced_cover >= 5: normalized_average_balanced_cover = 0
+        else: normalized_average_balanced_cover = 1 - (average_balanced_cover / max_average_balanced_cover)
+
+        normalized_average_balanced_cover = max(0.0, min(1.0, normalized_average_balanced_cover))
+
+
         average_coherence = (total_covering_non_goals / num_LMs) if num_LMs > 0 else 0
 
+        normalized_average_coherence = 0
         if max_non_goals == 0:  # Handle the case where max_non_goals is 0
             normalized_average_coherence = 1.0 if average_coherence == 0 else 0.0  # Perfect coherence if no non-goals
+        elif average_coherence > Rubric_max_coherence:
+            normalized_average_coherence = 0 # use if coherence exceeds the Rubrics standards.
         else:
-            normalized_average_coherence = 1.0 - (average_coherence / max_non_goals)
+            normalized_average_coherence = 1.0 - (average_coherence / Rubric_max_coherence)
 
         normalized_average_coherence = max(0.0, min(1.0, normalized_average_coherence))
 
@@ -642,14 +656,18 @@ if run_GA:
         #         else: time_interval_score = 1
 
         return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
-                min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting]
+                min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover]
 
     # GA Parameters
     num_generations = 200
-    num_parents_mating = 100
-    sol_per_pop = 100
-    num_genes = num_LMs
+    num_parents_mating = 20
+    sol_per_pop = 150
+    num_genes = len(LM_database)
 
+    # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
+    Rubric_max_time = math.ceil(max_time * 1.2)
+    Rubric_min_time = math.floor(min_time * 0.8)
+    Rubric_max_coherence = 1.1
 
     # Use NGSA for multi-objective problems
     #ga_instance = pygad.GA(num_generations=num_generations,
@@ -665,7 +683,7 @@ if run_GA:
                            sol_per_pop=sol_per_pop,  # Increased population size
                            num_genes=num_genes,
                            gene_space=gene_space,
-                           initial_population=created_seeded_population(sol_per_pop, num_genes),
+                           initial_population=generate_initial_population(sol_per_pop, num_genes, LM_KNs_Covered, KS_names),
                            fitness_func=fitness_func,
                            parent_selection_type='nsga2',  # Changed parent selection
                            mutation_type='scramble',  # Changed mutation type
@@ -677,38 +695,40 @@ if run_GA:
 
     ga_instance.run()
     ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
-                                    'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting'])
+                                    'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting', 'Normalized Balanced Cover', 'Average Cohesiveness'])
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
 
     solution = np.round(solution).astype(int)  # Round and cast to int
-
+    print(solution)
+    print(f"Fitness of best solution: {solution_fitness}")  # Print the fitness value
     num_LMs = np.sum(solution)
-    #print(solution)
-    difficulty_matching_average = np.sum(solution * matching_scores)
-    CTML_average = np.sum(solution * lm_CTML_score) / num_LMs
-    media_matching_average = np.sum(solution * LM_overall_preference_score) /num_LMs
-    total_duration = np.sum(solution * lm_time_taken)
+    #print("The number of LMs is:", num_LMs)
+
+    #difficulty_matching_average = np.sum(solution * matching_scores)
+    #CTML_average = np.sum(solution * lm_CTML_score) / num_LMs
+    #media_matching_average = np.sum(solution * LM_overall_preference_score) /num_LMs
+    #total_duration = np.sum(solution * lm_time_taken)
 
     # Confirm that there is at least 1 LM
-    if num_LMs > 0:
-        difficulty_matching_average = difficulty_matching_average / num_LMs
+   #if num_LMs > 0:
+   #     difficulty_matching_average = difficulty_matching_average / num_LMs
        # CTML_average = CTML_average / num_LMs
         #media_matching_average = media_matching_average / num_LMs
-    else:
-        difficulty_matching_average = 0
+   # else:
+     #   difficulty_matching_average = 0
         #CTML_average = 0
         #media_matching_average = 0
 
     #total_duration = np.sum(solution * lm_time_taken)
 
     #print(solution)
-    print(f"Difficulty Matching Average based on the best solution : {difficulty_matching_average}")
-    print(f"CTML Average based on the best solution : {CTML_average}")
-    print(f"Media Matching Average based on the best solution : {media_matching_average}")
-    print(f"Time duration average based on the best solution : {total_duration}")
-    print(f"Parameters of the best solution : {solution}")
-    print(f"Fitness value of the best solution = {solution_fitness}")
+    #print(f"Difficulty Matching Average based on the best solution : {difficulty_matching_average}")
+    #print(f"CTML Average based on the best solution : {CTML_average}")
+    #print(f"Media Matching Average based on the best solution : {media_matching_average}")
+    #print(f"Time duration average based on the best solution : {total_duration}")
+    #print(f"Parameters of the best solution : {solution}")
+    #print(f"Fitness value of the best solution = {solution_fitness}")
 
     # Print the personalized learning path
     # print("Personalized Learning Path:", personalized_learning_path)
@@ -719,6 +739,131 @@ if run_GA:
 
     pareto_front = ga_instance.pareto_fronts
     print("The length of the pareto front is: ", len(pareto_front))
+
+    run_test = True
+
+    if run_test:
+        personalized_learning_path = solution
+
+        # In run coherence test we only include LMs that exclusively cover student goal nodes.
+
+        # Note, we need to check all KNs to make sure that data is consistent.
+        run_coherence_test = False
+        if run_coherence_test:
+            # Select LMs that only cover goal KNs
+            for i in range(num_LMs):
+                # print(f"Checking LM_KNs_Covered[{i}]: {LM_KNs_Covered[i]}")
+                if any(kn in KS_names for kn in LM_KNs_Covered[i]):
+                    # print(LM_KNs_Covered[i])
+                    personalized_learning_path[i] = 1
+                else:
+                    personalized_learning_path[i] = 0
+
+        # Initialize variables
+        total_difficulty_score = 0
+        # total_media_score is the average of LM_media_match and flipped_preference_score
+        total_LM_media_match = 0
+        total_flipped_preference_score = 0
+        total_media_score = 0
+        total_CTML_score = 0
+        total_time = 0
+        count = 0
+        total_covering_non_goals = 0
+        total_covering_goals = 0
+
+        # Convert KS to a list of strings based on KNs
+        # LM_KNs_Covered - a list of lists of the Knowledge Nodes covered by each Learning Material
+        # Goal - iterate through all LMs and add up the number of coverings of KNs performed by LMs that are not goal nodes.
+
+        # Iterate through the candidate learning path and match scores
+        for i in range(len(personalized_learning_path)):
+            if personalized_learning_path[i] == 1:
+                # Add up the number of non-goal KNs covered by learning material
+                for kn in LM_KNs_Covered[i]:
+                    if kn not in KS_names:
+                        total_covering_non_goals += 1
+                    else:
+                        total_covering_goals += 1
+                total_media_score += LM_overall_preference_score[i]
+                total_LM_media_match += LM_media_match[i]
+                total_flipped_preference_score += flipped_preference_score[i]
+                total_difficulty_score += matching_scores[i]
+                total_CTML_score += lm_CTML_score[i]
+                total_time += lm_time_taken[i]
+                count += 1
+
+        # Begin Balanced Cover Section
+        # number of goal Knowledge Nodes in KS
+        # print("Total number of non-goal coverings", total_covering_non_goals)
+        # print("Total number of goal coverings", total_covering_goals)
+        # print("Number of goal KNs", len(KS_names))
+
+        balanced_cover_total = 0
+
+        for kn in KS_names:
+            num_coverings = 0
+            for i in range(len(personalized_learning_path)):
+                if personalized_learning_path[i] == 1:
+                    if kn in LM_KNs_Covered[i]: num_coverings += 1
+            # print("number of coverings for ", kn, "is:", num_coverings)
+            balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
+            # print("balanced score ", kn, " is ", abs(num_coverings - total_covering_goals / len(KS_names)))
+        #    for j in range(len(personalized_learning_path)):
+        # print("Balanced Cover is: ", balanced_cover_total)
+        print("Average Balanced Cover is: ", balanced_cover_total / len(KS_names))
+        # End Balanced Cover Section
+
+        if total_time > max_time:
+            print("PLP exceeds max time by", ((total_time - max_time) / max_time) * 100, "percent")
+        elif total_time < min_time:
+            print("PLP is less than min time by", ((min_time - total_time) / min_time) * 100, "percent")
+        else:
+            print("PLP is within the student time constraints.")
+
+        # Calculate average matching score
+        average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
+        average_media_preference_score = total_media_score / count if count > 0 else 0
+        average_CTML_score = total_CTML_score / count if count > 0 else 0
+        average_LM_media_match = total_LM_media_match / count if count > 0 else 0
+        average_preference = total_flipped_preference_score / count if count > 0 else 0
+        average_coherence = total_covering_non_goals / count if count > 0 else 0
+        multiple_document_principle_average = total_covering_goals / len(KS_names)
+        average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
+
+        #print("The number of LMs is:", num_LMs)
+        # calculate the average cohesiveness of the PLP
+        # Filter the embeddings of included learning materials
+        included_embeddings = [LM_database['embeddings'][i] for i in range(len(LM_database)) if
+                               personalized_learning_path[i] == 1]
+
+        num_included_LMs = len(included_embeddings)
+        total_similarity = 0
+        count = 0
+
+        for i in range(num_included_LMs):
+            for j in range(i + 1, num_included_LMs):
+                similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
+                normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
+                total_similarity += normalized_similarity
+                count += 1
+
+        average_cohesiveness = total_similarity / count if count > 0 else 0
+
+        # End section to calculate cohesiveness
+
+        # Print the personalized learning path and the average matching score
+        # print("Personalized Learning Path:", personalized_learning_path)
+        print("Total number of LMs is:", num_included_LMs)
+        print("Average Difficulty Matching Score:", average_difficulty_matching_score)
+        print("Average Overall Media Matching Score", average_media_preference_score)
+        #print("Average LM Media Matching Score", average_LM_media_match)
+        #print("Average LM Preference Matching Score", average_preference)
+        print("Average CTML Score", average_CTML_score)
+        print("Average Cohesiveness:", average_cohesiveness)
+        print("Total Time Taken", total_time)
+        print("Average Coherence", average_coherence)
+        print("Average Segmenting", average_segmenting_principle)
+        print("Multiple Document Integration Score", multiple_document_principle_average)
 
 
     # Example lookup
