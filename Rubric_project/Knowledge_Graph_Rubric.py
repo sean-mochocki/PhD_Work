@@ -50,7 +50,6 @@ LM_database['embeddings'] = LM_database['Description'].apply(lambda x: model.enc
 
 def calculate_cohesiveness(personalized_learning_path, LM_database):
     """Calculates cohesiveness efficiently using vectorized operations."""
-
     num_LMs = len(personalized_learning_path)  # Get total number of LMs
     included_indices = [i for i in range(num_LMs) if personalized_learning_path[i] == 1]
     included_embeddings = [LM_database['embeddings'][i] for i in included_indices]
@@ -66,16 +65,20 @@ def calculate_cohesiveness(personalized_learning_path, LM_database):
     # Efficiently calculate all pairwise cosine similarities
     similarity_matrix = util.pytorch_cos_sim(included_embeddings_tensor, included_embeddings_tensor)
 
-    # Zero out the diagonal (self-similarities) and upper triangle (redundant)
-    mask = torch.ones_like(similarity_matrix, dtype=torch.bool).triu(diagonal=1)
-    similarity_matrix = similarity_matrix.masked_fill(mask, 0.0)
+    # Normalize to 0-1 (vectorized):
+    normalized_similarity_matrix = (similarity_matrix + 1) / 2
+
+    # Zero out the diagonal and upper triangle (or lower triangle, but be consistent):
+    mask = torch.ones_like(normalized_similarity_matrix, dtype=torch.bool).triu(diagonal=0)  # Upper triangle including diagonal
+    normalized_similarity_matrix = normalized_similarity_matrix.masked_fill(mask, 0.0)
 
     # Calculate the sum of the remaining (lower triangle) similarities
-    total_similarity = similarity_matrix.sum().item()
+    total_similarity = normalized_similarity_matrix.sum().item()
 
     count = num_included_LMs * (num_included_LMs - 1) / 2 # Number of pairs
 
-    average_cohesiveness = (total_similarity + count) / count if count > 0 else 0.0 # Normalized score
+    average_cohesiveness = total_similarity / count if count > 0 else 0.0 # Normalized score
+    average_cohesiveness = max(0.0, min(1.0, average_cohesiveness))
 
     return average_cohesiveness
 
@@ -433,10 +436,6 @@ if correlation_graph:
 
 # Show the plot
 
-
-
-
-
 #print(matching_scores)
 run_GA = True
 if run_GA:
@@ -506,8 +505,8 @@ if run_GA:
         included_indices = np.where(solution == 1)[0]
         num_LMs = len(included_indices)
 
-        # Ensure that each goal KN is covered by at least 1 LM
-        if not check_kn_coverage(solution, LM_KNs_Covered, KS_names):
+        #Ensure a minimum of two Learning Materials
+        if num_LMs <= 2:
             difficulty_matching_average = -1
             CTML_average_normalized = -1
             media_matching_average = -1
@@ -521,95 +520,44 @@ if run_GA:
                     min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting,
                     normalized_average_balanced_cover]
 
-        difficulty_matching_average = np.sum(solution*matching_scores)
-        CTML_average = np.sum(solution*lm_CTML_score)
-        media_matching_average = np.sum(solution*LM_overall_preference_score)
+        difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
+        difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
+
+        CTML_average = np.sum(solution*lm_CTML_score) / num_LMs
+        CTML_average_normalized = (CTML_average - 1) / (4.0 - 1.0)
+        CTML_average_normalized = max(0.0, min(1.0, CTML_average_normalized))
+
+        media_matching_average = np.sum(solution*LM_overall_preference_score) / num_LMs
+        media_matching_average = max(0.0, min(1.0, media_matching_average))
 
         total_duration = np.sum(solution*lm_time_taken)
         min_time_compliance = 0.0
         max_time_compliance = 0.0
 
-        #if min_time <= total_duration <= max_time:
-        #    min_time_compliance = 1.0
-        #    max_time_compliance = 1.0
-        #elif total_duration < min_time:
-        #    max_time_compliance = 1.0
-        #    min_time_compliance = 1.0 - (abs(min_time -total_duration) / min_time)
-        #elif total_duration > max_time:
-        #    min_time_compliance = 1.0
-        #    max_time_compliance = 1.0 - abs(max_time - total_duration) / (global_max_time - max_time)
-
-        if total_duration < Rubric_min_time or total_duration > Rubric_max_time:
-            min_time_compliance = 0.0
-            max_time_compliance = 0.0
-        elif min_time <= total_duration <= max_time:
+        if min_time <= total_duration <= max_time:
             min_time_compliance = 1.0
             max_time_compliance = 1.0
         elif total_duration < min_time:  # Now within rubric range but below min_time
             min_time_compliance = 1.0 - (abs(min_time - total_duration) / abs(Rubric_min_time - min_time)) if Rubric_min_time != min_time else 0.0
-            max_time_compliance = 1.0
+            max_time_compliance = 1 # Punish the solution for being below min_time
         elif total_duration > max_time:  # Now within rubric range but above max_time
-            min_time_compliance = 1.0
-            max_time_compliance = 1.0 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
+            max_time_compliance = 0.25 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
+            min_time_compliance = 1 # Punish the solution for exceeding max_time
 
         min_time_compliance = max(0.0, min(1.0, min_time_compliance))
         max_time_compliance = max(0.0, min(1.0, max_time_compliance))
 
-        # Normalize difficulty_matching_average, CTML_average, and media_matching_average for [0,1] - penalize these scores if there are no LMs in solution
-        if num_LMs > 0:
-            difficulty_matching_average = difficulty_matching_average / num_LMs
-            CTML_average = CTML_average / num_LMs
-            media_matching_average = media_matching_average / num_LMs
-        else:
-            difficulty_matching_average = 0
-            CTML_average = 0
-            media_matching_average = 0
-
-        CTML_average_normalized = (CTML_average -1) / (4.0 -1.0)
-
-        difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
-        CTML_average_normalized = max(0.0, min(1.0, CTML_average_normalized))
-        media_matching_average = max(0.0, min(1.0, media_matching_average))
-
-
-        #average_cohesiveness = calculate_cohesiveness(solution, LM_database)
-        #average_cohesiveness = max(0.0, min(1.0, average_cohesiveness))
-
-        # # Use rubric to convert to integer scores
-        # LM_Difficulty_Matching = 1
-        # CTML_Principle = 1
-        # media_matching = 1
-        # time_interval_score = 1
-        #
-        # if difficulty_matching_average >= 0.75: LM_Difficulty_Matching = 4
-        # elif difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
-        # elif difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
-        #
-        # if CTML_average >= 3.25: CTML_Principle = 4
-        # elif CTML_average >= 2.5: CTML_Principle = 3
-        # elif CTML_average >= 1.75: CTML_Principle = 2
-        #
-        # if media_matching_average >= 0.75: media_matching = 4
-        # elif media_matching_average >= 0.5: media_matching = 3
-        # elif media_matching_average >= 0.25: media_matching = 2
-
+        # Begin section which examines relationships between LMs and KNs
         total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
 
-
-        # Find the max_average_balanced_cover is likely an NP-complete problem. We're using the rubric here to cap this score
-        # But futuristically we would want to find this number dynamically
-        max_average_balanced_cover = 5
         average_balanced_cover = calculate_balanced_cover(solution, LM_KNs_Covered, KS_names, total_covering_goals)
-        normalized_average_balanced_cover = 0
-        if average_balanced_cover >= 5: normalized_average_balanced_cover = 0
+        if average_balanced_cover >= max_average_balanced_cover: normalized_average_balanced_cover = 0
         else: normalized_average_balanced_cover = 1 - (average_balanced_cover / max_average_balanced_cover)
 
         normalized_average_balanced_cover = max(0.0, min(1.0, normalized_average_balanced_cover))
 
+        average_coherence = (total_covering_non_goals / num_LMs)
 
-        average_coherence = (total_covering_non_goals / num_LMs) if num_LMs > 0 else 0
-
-        normalized_average_coherence = 0
         if max_non_goals == 0:  # Handle the case where max_non_goals is 0
             normalized_average_coherence = 1.0 if average_coherence == 0 else 0.0  # Perfect coherence if no non-goals
         elif average_coherence > Rubric_max_coherence:
@@ -619,55 +567,33 @@ if run_GA:
 
         normalized_average_coherence = max(0.0, min(1.0, normalized_average_coherence))
 
-        # coherence_principle = 1
-        # if average_coherence <= 0.25: coherence_principle = 4
-        # elif average_coherence <= 0.5: coherence_principle = 3
-        # elif average_coherence <= 1.0: coherence_principle = 2
-
         MDIP_average = total_covering_goals / len(KS_names)
-        normalized_MDIP = MDIP_average / max_average_MDIP
+        normalized_MDIP = MDIP_average / Rubric_max_MDIP
         normalized_MDIP = max(0.0, min(1.0, normalized_MDIP))
 
-        average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / num_LMs if num_LMs > 0 else 0
-        normalized_segmenting = 0
+        average_segmenting = (total_covering_non_goals + total_covering_goals) / num_LMs
+        normalized_segmenting = normalize_segmenting(average_segmenting, average_segmenting_max, num_LMs)
 
-        normalized_segmenting = normalize_segmenting(average_segmenting_principle, average_segmenting_max, num_LMs)
+        average_cohesiveness = calculate_cohesiveness(solution, LM_database)
 
-        # segmenting_principle = 1
-        # if average_segmenting_principle <= 2: segmenting_principle = 4
-        # elif average_segmenting_principle <= 3: segmenting_principle = 3
-        # elif average_segmenting_principle <= 4: segmenting_principle = 2
 
-        #if min_time < total_duration < max_time: time_interval_score = 1.0
-        #elif total_duration < min_time:
-        #    time_interval_score = total_duration - min_time
-        #else: time_interval_score = max_time - total_duration
-        #else: time_interval_score = -abs(total_duration - (min_time + max_time) / 2)  # Negative absolute difference from midpoint
-
-        # if min_time < total_duration < max_time: time_interval_score = 4
-        # else:
-        #     if total_duration < min_time:
-        #         if 0 < abs(total_duration - min_time) / min_time <= 0.1: time_interval_score = 3
-        #         elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2: time_interval_score = 2
-        #         else: time_interval_score = 1
-        #     if total_duration > max_time:
-        #         if 0 < abs(total_duration - max_time) / max_time <= 0.1: time_interval_score = 3
-        #         elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2: time_interval_score = 2
-        #         else: time_interval_score = 1
 
         return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
-                min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover]
+                min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
 
     # GA Parameters
-    num_generations = 200
+    num_generations = 100
     num_parents_mating = 20
-    sol_per_pop = 150
+    sol_per_pop = 250
     num_genes = len(LM_database)
 
+    # Define Rubric Parameters that will be used in the GA Fitness Function
     # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
-    Rubric_max_time = math.ceil(max_time * 1.2)
-    Rubric_min_time = math.floor(min_time * 0.8)
+    Rubric_max_time = math.ceil(max_time * 1.5)
+    Rubric_min_time = math.floor(min_time * 0.5)
     Rubric_max_coherence = 1.1
+    max_average_balanced_cover = 5
+    Rubric_max_MDIP = 4
 
     # Use NGSA for multi-objective problems
     #ga_instance = pygad.GA(num_generations=num_generations,
@@ -683,7 +609,7 @@ if run_GA:
                            sol_per_pop=sol_per_pop,  # Increased population size
                            num_genes=num_genes,
                            gene_space=gene_space,
-                           initial_population=generate_initial_population(sol_per_pop, num_genes, LM_KNs_Covered, KS_names),
+                           #initial_population=generate_initial_population(sol_per_pop, num_genes, LM_KNs_Covered, KS_names),
                            fitness_func=fitness_func,
                            parent_selection_type='nsga2',  # Changed parent selection
                            mutation_type='scramble',  # Changed mutation type
@@ -695,7 +621,8 @@ if run_GA:
 
     ga_instance.run()
     ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
-                                    'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting', 'Normalized Balanced Cover', 'Average Cohesiveness'])
+                                    'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting',
+                                    'Normalized Balanced Cover', 'Average Cohesiveness'])
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
 
@@ -860,12 +787,62 @@ if run_GA:
         #print("Average LM Preference Matching Score", average_preference)
         print("Average CTML Score", average_CTML_score)
         print("Average Cohesiveness:", average_cohesiveness)
+        print("Calculating Cohesiveness function:", calculate_cohesiveness(personalized_learning_path, LM_database))
         print("Total Time Taken", total_time)
         print("Average Coherence", average_coherence)
         print("Average Segmenting", average_segmenting_principle)
         print("Multiple Document Integration Score", multiple_document_principle_average)
 
 
+
+
+
+        #
+
+        # # Use rubric to convert to integer scores
+        # LM_Difficulty_Matching = 1
+        # CTML_Principle = 1
+        # media_matching = 1
+        # time_interval_score = 1
+        #
+        # if difficulty_matching_average >= 0.75: LM_Difficulty_Matching = 4
+        # elif difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
+        # elif difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
+        #
+        # if CTML_average >= 3.25: CTML_Principle = 4
+        # elif CTML_average >= 2.5: CTML_Principle = 3
+        # elif CTML_average >= 1.75: CTML_Principle = 2
+        #
+        # if media_matching_average >= 0.75: media_matching = 4
+        # elif media_matching_average >= 0.5: media_matching = 3
+        # elif media_matching_average >= 0.25: media_matching = 2
+
+        # coherence_principle = 1
+        # if average_coherence <= 0.25: coherence_principle = 4
+        # elif average_coherence <= 0.5: coherence_principle = 3
+        # elif average_coherence <= 1.0: coherence_principle = 2
+
+        # segmenting_principle = 1
+        # if average_segmenting_principle <= 2: segmenting_principle = 4
+        # elif average_segmenting_principle <= 3: segmenting_principle = 3
+        # elif average_segmenting_principle <= 4: segmenting_principle = 2
+
+        #if min_time < total_duration < max_time: time_interval_score = 1.0
+        #elif total_duration < min_time:
+        #    time_interval_score = total_duration - min_time
+        #else: time_interval_score = max_time - total_duration
+        #else: time_interval_score = -abs(total_duration - (min_time + max_time) / 2)  # Negative absolute difference from midpoint
+
+        # if min_time < total_duration < max_time: time_interval_score = 4
+        # else:
+        #     if total_duration < min_time:
+        #         if 0 < abs(total_duration - min_time) / min_time <= 0.1: time_interval_score = 3
+        #         elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2: time_interval_score = 2
+        #         else: time_interval_score = 1
+        #     if total_duration > max_time:
+        #         if 0 < abs(total_duration - max_time) / max_time <= 0.1: time_interval_score = 3
+        #         elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2: time_interval_score = 2
+        #         else: time_interval_score = 1
     # Example lookup
     #KN = 'Speech Processing'
     #cog_level = KN_cog_level_dict.get(KN, "KN not found")
