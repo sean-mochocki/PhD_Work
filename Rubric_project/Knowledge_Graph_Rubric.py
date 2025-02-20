@@ -1,6 +1,7 @@
 import igraph as ig
 import pandas as pd
 import ast
+import os
 from scipy.stats import pearsonr, spearmanr
 from sklearn.preprocessing import OneHotEncoder
 import spacy
@@ -136,6 +137,9 @@ profile_database = pd.read_excel(learner_profile)
 profile_database['goals'] = profile_database['goals'].apply(lambda x: ast.literal_eval(x) if x != '[]' else [])
 
 # This is the point in the code where we start solving problems for individual learners. This will be a loop in the final version
+experiment_df = pd.DataFrame(columns=["Student_id", "Personalized Learning Path", "Total number of LMs", "Difficulty Average", "Media Matching Average", "CTML Average", "Cohesiveness Average",
+                                      "Balance Average", "PLP Duration", "Coherence Average", "Segmenting Average", "MDIP Average"])
+
 student_profile_id = 0
 print("Student profile is: ", student_profile_id )
 
@@ -441,24 +445,20 @@ run_GA = True
 if run_GA:
     gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
-    def generate_initial_population(population_size, num_genes, LM_KNs_Covered, KS_names):
-        """Generates an initial population where all solutions satisfy KN coverage."""
-        num_ks = len(KS_names)
-        population = []
-        while len(population) < population_size:
-            solution = np.random.randint(0, 2, len(LM_database))  # Generate a random solution (0s and 1s)
-            covered_kns = set()
-            for i, lm_included in enumerate(solution):
-                if lm_included == 1:
-                    for kn in LM_KNs_Covered[i]:
-                        covered_kns.add(kn)
 
-            if len(covered_kns) == num_ks:  # Check if all KNs are covered
-                population.append(solution)
-                print("Adding chromosome:", len(population))
-            # If the constraint isn't met, the while loop continues to generate a new random solution
+    def generate_initial_population(population_size, num_genes, inclusion_probability):
+        population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
+
+        i = 0
+        while i < population_size:
+            solution = np.random.choice([0, 1], num_genes, p=[1 - inclusion_probability, inclusion_probability])
+            num_LMs = np.sum(solution)  # More efficient way to count 1s
+            if num_LMs >= 2:
+                population[i] = solution  # Assign directly to the pre-allocated array
+                i += 1
+
         print("Initial population is complete")
-        return np.array(population)  # Important: Convert the list to a NumPy array
+        return population
 
     # Create an initial population composed of random chromosomes and seeds created from single-objective heuristics
     def created_seeded_population(population_size, num_genes):
@@ -516,9 +516,10 @@ if run_GA:
             normalized_MDIP = -1
             normalized_segmenting = -1
             normalized_average_balanced_cover = -1
+            average_cohesiveness = -1
             return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
                     min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting,
-                    normalized_average_balanced_cover]
+                    normalized_average_balanced_cover, average_cohesiveness]
 
         difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
         difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
@@ -572,7 +573,7 @@ if run_GA:
         normalized_MDIP = max(0.0, min(1.0, normalized_MDIP))
 
         average_segmenting = (total_covering_non_goals + total_covering_goals) / num_LMs
-        normalized_segmenting = normalize_segmenting(average_segmenting, average_segmenting_max, num_LMs)
+        normalized_segmenting = normalize_segmenting(average_segmenting, Rubric_max_segmenting, num_LMs)
 
         average_cohesiveness = calculate_cohesiveness(solution, LM_database)
 
@@ -582,10 +583,11 @@ if run_GA:
                 min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
 
     # GA Parameters
-    num_generations = 100
+    num_generations = 50
     num_parents_mating = 20
-    sol_per_pop = 250
+    sol_per_pop = 100
     num_genes = len(LM_database)
+    inclusion_probability = 0.15
 
     # Define Rubric Parameters that will be used in the GA Fitness Function
     # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
@@ -594,6 +596,7 @@ if run_GA:
     Rubric_max_coherence = 1.1
     max_average_balanced_cover = 5
     Rubric_max_MDIP = 4
+    Rubric_max_segmenting = 5
 
     # Use NGSA for multi-objective problems
     #ga_instance = pygad.GA(num_generations=num_generations,
@@ -609,7 +612,7 @@ if run_GA:
                            sol_per_pop=sol_per_pop,  # Increased population size
                            num_genes=num_genes,
                            gene_space=gene_space,
-                           #initial_population=generate_initial_population(sol_per_pop, num_genes, LM_KNs_Covered, KS_names),
+                           initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
                            fitness_func=fitness_func,
                            parent_selection_type='nsga2',  # Changed parent selection
                            mutation_type='scramble',  # Changed mutation type
@@ -620,7 +623,7 @@ if run_GA:
 
 
     ga_instance.run()
-    ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
+    ga_instance.plot_fitness(label=['Student_id', 'LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
                                     'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting',
                                     'Normalized Balanced Cover', 'Average Cohesiveness'])
 
@@ -737,7 +740,8 @@ if run_GA:
             # print("balanced score ", kn, " is ", abs(num_coverings - total_covering_goals / len(KS_names)))
         #    for j in range(len(personalized_learning_path)):
         # print("Balanced Cover is: ", balanced_cover_total)
-        print("Average Balanced Cover is: ", balanced_cover_total / len(KS_names))
+        balanced_average = balanced_cover_total / len(KS_names)
+        print("Average Balanced Cover is: ", balanced_average)
         # End Balanced Cover Section
 
         if total_time > max_time:
@@ -779,20 +783,37 @@ if run_GA:
         # End section to calculate cohesiveness
 
         # Print the personalized learning path and the average matching score
-        # print("Personalized Learning Path:", personalized_learning_path)
+        print("Personalized Learning Path:", personalized_learning_path)
         print("Total number of LMs is:", num_included_LMs)
         print("Average Difficulty Matching Score:", average_difficulty_matching_score)
         print("Average Overall Media Matching Score", average_media_preference_score)
-        #print("Average LM Media Matching Score", average_LM_media_match)
-        #print("Average LM Preference Matching Score", average_preference)
         print("Average CTML Score", average_CTML_score)
         print("Average Cohesiveness:", average_cohesiveness)
-        print("Calculating Cohesiveness function:", calculate_cohesiveness(personalized_learning_path, LM_database))
         print("Total Time Taken", total_time)
         print("Average Coherence", average_coherence)
         print("Average Segmenting", average_segmenting_principle)
         print("Multiple Document Integration Score", multiple_document_principle_average)
 
+
+        data = {
+            "Student_id": int(student_profile_id),
+            "Personalized Learning Path": str(personalized_learning_path),
+            "Total number of LMs": num_included_LMs,
+            "Difficulty Average": average_difficulty_matching_score,
+            "Media Matching Average": average_media_preference_score,
+            "CTML Average": average_CTML_score,
+            "Cohesiveness Average": average_cohesiveness,
+            "Balance Average": balanced_average,
+            "PLP Duration": total_time,
+            "Coherence Average": average_coherence,
+            "Segmenting Average": average_segmenting_principle,
+            "MDIP Average": multiple_document_principle_average
+        }
+
+        data = pd.DataFrame(data, index=[0])
+        experiment_df = pd.concat([experiment_df, data], ignore_index=True)
+        Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/GA_Results.csv"
+        experiment_df.to_csv(Experiment)
 
 
 
