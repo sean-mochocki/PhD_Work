@@ -583,9 +583,10 @@ if run_GA:
                 min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
 
     # GA Parameters
-    num_generations = 50
-    num_parents_mating = 20
-    sol_per_pop = 100
+    # Maybe consider high population, low inclusion probability, and high mutation?
+    num_generations = 100
+    num_parents_mating = 50
+    sol_per_pop = 500
     num_genes = len(LM_database)
     inclusion_probability = 0.15
 
@@ -623,7 +624,7 @@ if run_GA:
 
 
     ga_instance.run()
-    ga_instance.plot_fitness(label=['Student_id', 'LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
+    ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
                                     'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting',
                                     'Normalized Balanced Cover', 'Average Cohesiveness'])
 
@@ -794,6 +795,65 @@ if run_GA:
         print("Average Segmenting", average_segmenting_principle)
         print("Multiple Document Integration Score", multiple_document_principle_average)
 
+        rubric_scores = {
+            "LM_Difficulty_Matching": 1,
+            "CTML_Principle": 1,
+            "media_matching": 1,
+            "time_interval_score": 1,
+            "coherence_principle": 1,
+            "segmenting_principle": 1,
+            "balance": 1,
+            "cohesiveness": 1,
+            "MDIP": 1,
+            "Rubric Average": 1
+        }
+
+        if average_difficulty_matching_score >= 0.75: rubric_scores["LM_Difficulty_Matching"] = 4
+        elif average_difficulty_matching_score >= 0.5: rubric_scores["LM_Difficulty_Matching"] = 3
+        elif average_difficulty_matching_score >= 0.25: rubric_scores["LM_Difficulty_Matching"] = 2
+
+        if average_CTML_score >= 3.25: rubric_scores["CTML_Principle"] = 4
+        elif average_CTML_score >= 2.5: rubric_scores["CTML_Principle"] = 3
+        elif average_CTML_score >= 1.75: rubric_scores["CTML_Principle"] = 2
+
+        if average_media_preference_score >= 0.75: rubric_scores["media_matching"] = 4
+        elif average_media_preference_score >= 0.5: rubric_scores["media_matching"] = 3
+        elif average_media_preference_score >= 0.25: rubric_scores["media_matching"] = 2
+
+        if min_time < total_time < max_time: rubric_scores["time_interval_score"] = 4
+        else:
+            if total_time < min_time:
+                if 0 < abs(total_time - min_time) / min_time <= 0.1: rubric_scores["time_interval_score"] = 3
+                elif 0.1 < abs(total_time - min_time) / min_time <= 0.2: rubric_scores["time_interval_score"] = 2
+            if total_time > max_time:
+                if 0 < abs(total_time - max_time) / max_time <= 0.1: rubric_scores["time_interval_score"] = 3
+                elif 0.1 < abs(total_time - max_time) / max_time <= 0.2: rubric_scores["time_interval_score"] = 2
+
+        if average_coherence <= 0.25: rubric_scores["coherence_principle"] = 4
+        elif average_coherence <= 0.5: rubric_scores["coherence_principle"]  = 3
+        elif average_coherence <= 1.0: rubric_scores["coherence_principle"]  = 2
+
+        if average_segmenting_principle <= 2: rubric_scores["segmenting_principle"]  = 4
+        elif average_segmenting_principle <= 3: rubric_scores["segmenting_principle"]  = 3
+        elif average_segmenting_principle <= 4: rubric_scores["segmenting_principle"]  = 2
+
+        if average_cohesiveness >= 0.75: rubric_scores["cohesiveness"]  = 4
+        elif average_cohesiveness >= 0.5: rubric_scores["cohesiveness"] = 3
+        elif average_cohesiveness >= 0.25: rubric_scores["cohesiveness"] = 2
+
+        if balanced_average <= 1: rubric_scores["balance"] = 4
+        elif balanced_average <= 2.9: rubric_scores["balance"] = 3
+        elif balanced_average <= 4.9: rubric_scores["balance"] = 2
+
+        if multiple_document_principle_average >= 4: rubric_scores["MDIP"] = 4
+        elif multiple_document_principle_average >= 3: rubric_scores["MDIP"]  = 3
+        elif multiple_document_principle_average >= 2: rubric_scores["MDIP"]  = 2
+
+        rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
+
+        # Optional: Print individual rubric scores
+        for name, score in rubric_scores.items():
+            print(f"Rubric {name}: {score}")
 
         data = {
             "Student_id": int(student_profile_id),
