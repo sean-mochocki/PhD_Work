@@ -584,9 +584,9 @@ if run_GA:
 
     # GA Parameters
     # Maybe consider high population, low inclusion probability, and high mutation?
-    num_generations = 100
-    num_parents_mating = 50
-    sol_per_pop = 500
+    num_generations = 50
+    num_parents_mating = 20
+    sol_per_pop = 50
     num_genes = len(LM_database)
     inclusion_probability = 0.15
 
@@ -624,15 +624,17 @@ if run_GA:
 
 
     ga_instance.run()
-    ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
-                                    'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting',
-                                    'Normalized Balanced Cover', 'Average Cohesiveness'])
+    #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
+    #                                'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting',
+    #                                'Normalized Balanced Cover', 'Average Cohesiveness'])
+
+    print("Finished running GA")
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
 
     solution = np.round(solution).astype(int)  # Round and cast to int
-    print(solution)
-    print(f"Fitness of best solution: {solution_fitness}")  # Print the fitness value
+    #print(solution)
+    #print(f"Fitness of best solution: {solution_fitness}")  # Print the fitness value
     num_LMs = np.sum(solution)
     #print("The number of LMs is:", num_LMs)
 
@@ -668,8 +670,27 @@ if run_GA:
     #for i, score in enumerate(matching_scores):
     #    if score != 0: print(f"LM {i+1} has a matching score of {score:.3f}")
 
-    pareto_front = ga_instance.pareto_fronts
-    print("The length of the pareto front is: ", len(pareto_front))
+    #pareto_fronts = ga_instance.pareto_fronts
+    #print("The length of the pareto front is: ", len(pareto_fronts))
+    solutions = ga_instance.population
+
+    all_unique_solutions = []
+    for candidate_solution in solutions:
+
+        candidate_solution = np.round(candidate_solution).astype(int)
+
+        # Check for uniqueness against the *master* list:
+        is_unique = True
+        for existing_solution in all_unique_solutions:
+            if np.array_equal(candidate_solution, existing_solution):
+                is_unique = False
+                break
+
+        if is_unique:
+            all_unique_solutions.append(candidate_solution)
+
+    #print(len(all_unique_solutions))
+    #print(all_unique_solutions)
 
     run_test = True
 
