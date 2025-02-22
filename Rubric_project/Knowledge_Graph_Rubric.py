@@ -460,6 +460,49 @@ if run_GA:
         print("Initial population is complete")
         return population
 
+
+    def generate_initial_population_weighted(population_size, num_genes, inclusion_probability_non_KS,
+                                             inclusion_probability_KS, KS_names, LM_KNs_Covered):
+        """
+        Generates an initial population with weighted inclusion probabilities.
+
+        Args:
+            population_size: The number of solutions in the population.
+            num_genes: The number of learning materials (genes).
+            inclusion_probability_non_KS: Inclusion probability for LMs not covering any KS.
+            inclusion_probability_KS: Inclusion probability for LMs covering at least one KS.
+            KS_names: A list of Knowledge Statement names.
+            LM_KNs_Covered: A list of sets, where each set contains the KNs covered by a learning material.
+
+        Returns:
+            A NumPy array representing the initial population.
+        """
+
+        population = np.zeros((population_size, num_genes), dtype=int)
+        i = 0
+
+        while i < population_size:
+            solution = np.zeros(num_genes, dtype=int)  # Initialize solution with zeros
+
+            for gene_index in range(num_genes):
+                covered_kn_names = LM_KNs_Covered[gene_index]
+                covers_ks = any(kn_name in KS_names for kn_name in covered_kn_names)
+
+                if covers_ks:
+                    inclusion_prob = inclusion_probability_KS
+                else:
+                    inclusion_prob = inclusion_probability_non_KS
+
+                solution[gene_index] = np.random.choice([0, 1], p=[1 - inclusion_prob, inclusion_prob])
+
+            num_LMs = np.sum(solution)
+            if num_LMs >= 2:
+                population[i] = solution
+                i += 1
+
+        print("Initial population with weighted inclusion is complete")
+        return population
+
     # Create an initial population composed of random chromosomes and seeds created from single-objective heuristics
     def created_seeded_population(population_size, num_genes):
         #num_seeds = 1
@@ -584,11 +627,13 @@ if run_GA:
 
     # GA Parameters
     # Maybe consider high population, low inclusion probability, and high mutation?
-    num_generations = 100
+    num_generations = 125
     num_parents_mating = 50
-    sol_per_pop = 100
+    sol_per_pop = 200
     num_genes = len(LM_database)
     inclusion_probability = 0.15
+    inclusion_probability_non_KS = 0.3
+    inclusion_probability_KS = 0.7
 
     # Define Rubric Parameters that will be used in the GA Fitness Function
     # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
@@ -613,7 +658,8 @@ if run_GA:
                            sol_per_pop=sol_per_pop,  # Increased population size
                            num_genes=num_genes,
                            gene_space=gene_space,
-                           initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
+                           initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
+                           #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
                            fitness_func=fitness_func,
                            parent_selection_type='nsga2',  # Changed parent selection
                            mutation_type='scramble',  # Changed mutation type
