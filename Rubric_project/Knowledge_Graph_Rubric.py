@@ -137,8 +137,9 @@ profile_database = pd.read_excel(learner_profile)
 profile_database['goals'] = profile_database['goals'].apply(lambda x: ast.literal_eval(x) if x != '[]' else [])
 
 # This is the point in the code where we start solving problems for individual learners. This will be a loop in the final version
-experiment_df = pd.DataFrame(columns=["Student_id", "Personalized Learning Path", "Total number of LMs", "Difficulty Average", "Media Matching Average", "CTML Average", "Cohesiveness Average",
-                                      "Balance Average", "PLP Duration", "Coherence Average", "Segmenting Average", "MDIP Average"])
+#experiment_df = pd.DataFrame(columns=["Student_id", "Personalized Learning Path", "Total number of LMs", "Difficulty Average", "Media Matching Average", "CTML Average", "Cohesiveness Average",
+#                                      "Balance Average", "PLP Duration", "Coherence Average", "Segmenting Average", "MDIP Average"])
+experiment_df = pd.DataFrame()
 
 student_profile_id = 0
 print("Student profile is: ", student_profile_id )
@@ -741,6 +742,8 @@ if run_GA:
     best_solution = []
     best_score = 0
     best_rubric_scores = {}
+    best_raw_data = {}
+
     for candidate_solution in all_unique_solutions:
         total_difficulty_score = 0
         total_media_score = 0
@@ -799,6 +802,21 @@ if run_GA:
                 count += 1
 
         average_cohesiveness = total_similarity / count if count > 0 else 0
+
+        raw_data = {
+            "Student_id": int(student_profile_id),
+            "Personalized Learning Path": str(candidate_solution),
+            "Total number of LMs": num_included_LMs,
+            "Difficulty Average": average_difficulty_matching_score,
+            "Media Matching Average": average_media_preference_score,
+            "CTML Average": average_CTML_score,
+            "Cohesiveness Average": average_cohesiveness,
+            "Balance Average": balanced_average,
+            "PLP Duration": total_time,
+            "Coherence Average": average_coherence,
+            "Segmenting Average": average_segmenting_principle,
+            "MDIP Average": multiple_document_principle_average
+        }
 
         rubric_scores = {
             "LM_Difficulty_Matching": 1,
@@ -890,12 +908,19 @@ if run_GA:
         if (rubric_scores["Rubric Average"]) >= best_score:
             best_score = rubric_scores["Rubric Average"]
             best_solution = candidate_solution
+            best_raw_data = raw_data
             best_rubric_scores = rubric_scores
 
-    print("Best Solution is:", best_solution)
-    print("The scores of the best solution is:")
-    for name, score in best_rubric_scores.items():
-        print(f"Rubric {name}: {score}")
+    combined_data = {**best_raw_data, **best_rubric_scores}
+    combined_data_df = pd.DataFrame(combined_data, index=[0])
+    experiment_df = pd.concat([experiment_df, combined_data_df], ignore_index=True)
+    Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/GA_Results.csv"
+    experiment_df.to_csv(Experiment)
+
+    #print("Best Solution is:", best_solution)
+    #print("The scores of the best solution is:")
+    #for name, score in best_rubric_scores.items():
+    #    print(f"Rubric {name}: {score}")
 
 
     run_test = False
