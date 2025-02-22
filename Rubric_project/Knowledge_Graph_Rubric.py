@@ -584,9 +584,9 @@ if run_GA:
 
     # GA Parameters
     # Maybe consider high population, low inclusion probability, and high mutation?
-    num_generations = 50
-    num_parents_mating = 20
-    sol_per_pop = 50
+    num_generations = 100
+    num_parents_mating = 50
+    sol_per_pop = 100
     num_genes = len(LM_database)
     inclusion_probability = 0.15
 
@@ -676,7 +676,6 @@ if run_GA:
 
     all_unique_solutions = []
     for candidate_solution in solutions:
-
         candidate_solution = np.round(candidate_solution).astype(int)
 
         # Check for uniqueness against the *master* list:
@@ -692,7 +691,168 @@ if run_GA:
     #print(len(all_unique_solutions))
     #print(all_unique_solutions)
 
-    run_test = True
+    print("Evaluating GA population")
+    best_solution = []
+    best_score = 0
+    best_rubric_scores = {}
+    for candidate_solution in all_unique_solutions:
+        total_difficulty_score = 0
+        total_media_score = 0
+        total_CTML_score = 0
+        total_time = 0
+        count = 0
+        total_covering_non_goals = 0
+        total_covering_goals = 0
+
+        # Iterate through the candidate learning path and match scores
+        for i in range(len(candidate_solution)):
+            if candidate_solution[i] == 1:
+                # Add up the number of non-goal KNs covered by learning material
+                for kn in LM_KNs_Covered[i]:
+                    if kn not in KS_names:
+                        total_covering_non_goals += 1
+                    else:
+                        total_covering_goals += 1
+                total_media_score += LM_overall_preference_score[i]
+                total_difficulty_score += matching_scores[i]
+                total_CTML_score += lm_CTML_score[i]
+                total_time += lm_time_taken[i]
+                count += 1
+
+        balanced_cover_total = 0
+        for kn in KS_names:
+            num_coverings = 0
+            for i in range(len(candidate_solution)):
+                if candidate_solution[i] == 1:
+                    if kn in LM_KNs_Covered[i]: num_coverings += 1
+            balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
+        balanced_average = balanced_cover_total / len(KS_names)
+        #print("Average Balanced Cover is: ", balanced_average)
+        # End Balanced Cover Section
+
+        # Calculate average matching score
+        average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
+        average_media_preference_score = total_media_score / count if count > 0 else 0
+        average_CTML_score = total_CTML_score / count if count > 0 else 0
+        average_coherence = total_covering_non_goals / count if count > 0 else 0
+        multiple_document_principle_average = total_covering_goals / len(KS_names)
+        average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
+
+        included_embeddings = [LM_database['embeddings'][i] for i in range(len(LM_database)) if
+                               candidate_solution[i] == 1]
+
+        num_included_LMs = len(included_embeddings)
+        total_similarity = 0
+        count = 0
+
+        for i in range(num_included_LMs):
+            for j in range(i + 1, num_included_LMs):
+                similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
+                normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
+                total_similarity += normalized_similarity
+                count += 1
+
+        average_cohesiveness = total_similarity / count if count > 0 else 0
+
+        rubric_scores = {
+            "LM_Difficulty_Matching": 1,
+            "CTML_Principle": 1,
+            "media_matching": 1,
+            "time_interval_score": 1,
+            "coherence_principle": 1,
+            "segmenting_principle": 1,
+            "balance": 1,
+            "cohesiveness": 1,
+            "MDIP": 1,
+            "Rubric Average": 1
+        }
+
+        if average_difficulty_matching_score >= 0.75:
+            rubric_scores["LM_Difficulty_Matching"] = 4
+        elif average_difficulty_matching_score >= 0.5:
+            rubric_scores["LM_Difficulty_Matching"] = 3
+        elif average_difficulty_matching_score >= 0.25:
+            rubric_scores["LM_Difficulty_Matching"] = 2
+
+        if average_CTML_score >= 3.25:
+            rubric_scores["CTML_Principle"] = 4
+        elif average_CTML_score >= 2.5:
+            rubric_scores["CTML_Principle"] = 3
+        elif average_CTML_score >= 1.75:
+            rubric_scores["CTML_Principle"] = 2
+
+        if average_media_preference_score >= 0.75:
+            rubric_scores["media_matching"] = 4
+        elif average_media_preference_score >= 0.5:
+            rubric_scores["media_matching"] = 3
+        elif average_media_preference_score >= 0.25:
+            rubric_scores["media_matching"] = 2
+
+        if min_time < total_time < max_time:
+            rubric_scores["time_interval_score"] = 4
+        else:
+            if total_time < min_time:
+                if 0 < abs(total_time - min_time) / min_time <= 0.1:
+                    rubric_scores["time_interval_score"] = 3
+                elif 0.1 < abs(total_time - min_time) / min_time <= 0.2:
+                    rubric_scores["time_interval_score"] = 2
+            if total_time > max_time:
+                if 0 < abs(total_time - max_time) / max_time <= 0.1:
+                    rubric_scores["time_interval_score"] = 3
+                elif 0.1 < abs(total_time - max_time) / max_time <= 0.2:
+                    rubric_scores["time_interval_score"] = 2
+
+        if average_coherence <= 0.25:
+            rubric_scores["coherence_principle"] = 4
+        elif average_coherence <= 0.5:
+            rubric_scores["coherence_principle"] = 3
+        elif average_coherence <= 1.0:
+            rubric_scores["coherence_principle"] = 2
+
+        if average_segmenting_principle <= 2:
+            rubric_scores["segmenting_principle"] = 4
+        elif average_segmenting_principle <= 3:
+            rubric_scores["segmenting_principle"] = 3
+        elif average_segmenting_principle <= 4:
+            rubric_scores["segmenting_principle"] = 2
+
+        if average_cohesiveness >= 0.75:
+            rubric_scores["cohesiveness"] = 4
+        elif average_cohesiveness >= 0.5:
+            rubric_scores["cohesiveness"] = 3
+        elif average_cohesiveness >= 0.25:
+            rubric_scores["cohesiveness"] = 2
+
+        if balanced_average <= 1:
+            rubric_scores["balance"] = 4
+        elif balanced_average <= 2.9:
+            rubric_scores["balance"] = 3
+        elif balanced_average <= 4.9:
+            rubric_scores["balance"] = 2
+
+        if multiple_document_principle_average >= 4:
+            rubric_scores["MDIP"] = 4
+        elif multiple_document_principle_average >= 3:
+            rubric_scores["MDIP"] = 3
+        elif multiple_document_principle_average >= 2:
+            rubric_scores["MDIP"] = 2
+
+        rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
+
+        #print("Rubric average is:", rubric_scores["Rubric Average"])
+
+        if (rubric_scores["Rubric Average"]) >= best_score:
+            best_score = rubric_scores["Rubric Average"]
+            best_solution = candidate_solution
+            best_rubric_scores = rubric_scores
+
+    print("Best Solution is:", best_solution)
+    print("The scores of the best solution is:")
+    for name, score in best_rubric_scores.items():
+        print(f"Rubric {name}: {score}")
+
+
+    run_test = False
 
     if run_test:
         personalized_learning_path = solution
@@ -757,11 +917,7 @@ if run_GA:
             for i in range(len(personalized_learning_path)):
                 if personalized_learning_path[i] == 1:
                     if kn in LM_KNs_Covered[i]: num_coverings += 1
-            # print("number of coverings for ", kn, "is:", num_coverings)
             balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
-            # print("balanced score ", kn, " is ", abs(num_coverings - total_covering_goals / len(KS_names)))
-        #    for j in range(len(personalized_learning_path)):
-        # print("Balanced Cover is: ", balanced_cover_total)
         balanced_average = balanced_cover_total / len(KS_names)
         print("Average Balanced Cover is: ", balanced_average)
         # End Balanced Cover Section
