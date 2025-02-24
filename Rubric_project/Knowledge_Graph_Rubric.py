@@ -446,21 +446,6 @@ for student_profile_id in range(len(profile_database)):
         gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
 
-        def generate_initial_population(population_size, num_genes, inclusion_probability):
-            population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
-
-            i = 0
-            while i < population_size:
-                solution = np.random.choice([0, 1], num_genes, p=[1 - inclusion_probability, inclusion_probability])
-                num_LMs = np.sum(solution)  # More efficient way to count 1s
-                if num_LMs >= 2:
-                    population[i] = solution  # Assign directly to the pre-allocated array
-                    i += 1
-
-            print("Initial population is complete")
-            return population
-
-
         def generate_initial_population_sliding_probability(population_size, num_genes, KS_names, LM_KNs_Covered,
                                                             ratio):
             """
@@ -593,7 +578,7 @@ for student_profile_id in range(len(profile_database)):
 
         # Consider going to single objective and returning the average Rubric score inside the fitness function.
 
-        def fitness_func(ga_instance, solution, solution_idx):
+        def fitness_func2(ga_instance, solution, solution_idx):
             solution = np.round(solution).astype(int)  # Round and cast to int
             included_indices = np.where(solution == 1)[0]
             num_LMs = len(included_indices)
@@ -670,6 +655,8 @@ for student_profile_id in range(len(profile_database)):
 
             average_cohesiveness = calculate_cohesiveness(solution, LM_database)
 
+
+
             # Try reducing to three objectives to simplify problem
             #objective 1 - LM fitness for the learner
             objective1 = (difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness) / 4
@@ -680,15 +667,191 @@ for student_profile_id in range(len(profile_database)):
 
             return [objective1, objective2, objective3]
 
+
+
+        def fitness_func(ga_instance, solution, solution_idx):
+            solution = np.round(solution).astype(int)  # Round and cast to int
+            included_indices = np.where(solution == 1)[0]
+            num_LMs = len(included_indices)
+
+            #Ensure a minimum of two Learning Materials
+            if num_LMs <= 2:
+
+                return [0, 0, 0]
+
+            difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
+            difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
+
+            CTML_average = np.sum(solution*lm_CTML_score) / num_LMs
+            CTML_average_normalized = (CTML_average - 1) / (4.0 - 1.0)
+            CTML_average_normalized = max(0.0, min(1.0, CTML_average_normalized))
+
+            media_matching_average = np.sum(solution*LM_overall_preference_score) / num_LMs
+            media_matching_average = max(0.0, min(1.0, media_matching_average))
+
+            total_duration = np.sum(solution*lm_time_taken)
+            min_time_compliance = 0.0
+            max_time_compliance = 0.0
+
+            # if min_time <= total_duration <= max_time:
+            #     min_time_compliance = 1.0
+            #     max_time_compliance = 1.0
+            # elif total_duration < min_time:  # Now within rubric range but below min_time
+            #     min_time_compliance = 1.0 - (abs(min_time - total_duration) / abs(Rubric_min_time - min_time)) if Rubric_min_time != min_time else 0.0
+            #     max_time_compliance = 1
+            # elif total_duration > max_time:  # Now within rubric range but above max_time
+            #     max_time_compliance = 0.25 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
+            #     min_time_compliance = 1
+
+            if min_time <= total_duration <= max_time:
+                min_time_compliance = 1.0
+                max_time_compliance = 1.0
+            elif total_duration < min_time:
+                min_time_compliance = 1.0 - (abs(min_time - total_duration) / min_time)
+                max_time_compliance = min_time_compliance
+            elif total_duration > max_time:  # Now within rubric range but above max_time
+                max_time_compliance = 0.25 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
+                min_time_compliance = max_time_compliance
+
+            min_time_compliance = max(0.0, min(1.0, min_time_compliance))
+            max_time_compliance = max(0.0, min(1.0, max_time_compliance))
+
+            # Begin section which examines relationships between LMs and KNs
+            total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
+
+            average_balanced_cover = calculate_balanced_cover(solution, LM_KNs_Covered, KS_names, total_covering_goals)
+            if average_balanced_cover >= max_average_balanced_cover: normalized_average_balanced_cover = 0
+            else: normalized_average_balanced_cover = 1 - (average_balanced_cover / max_average_balanced_cover)
+
+            normalized_average_balanced_cover = max(0.0, min(1.0, normalized_average_balanced_cover))
+
+            average_coherence = (total_covering_non_goals / num_LMs)
+
+            if max_non_goals == 0:  # Handle the case where max_non_goals is 0
+                normalized_average_coherence = 1.0 if average_coherence == 0 else 0.0  # Perfect coherence if no non-goals
+            elif average_coherence > Rubric_max_coherence:
+                normalized_average_coherence = 0 # use if coherence exceeds the Rubrics standards.
+            else:
+                normalized_average_coherence = 1.0 - (average_coherence / Rubric_max_coherence)
+
+            normalized_average_coherence = max(0.0, min(1.0, normalized_average_coherence))
+
+            MDIP_average = total_covering_goals / len(KS_names)
+            normalized_MDIP = MDIP_average / Rubric_max_MDIP
+            normalized_MDIP = max(0.0, min(1.0, normalized_MDIP))
+
+            average_segmenting = (total_covering_non_goals + total_covering_goals) / num_LMs
+            normalized_segmenting = normalize_segmenting(average_segmenting, Rubric_max_segmenting, num_LMs)
+
+            average_cohesiveness = calculate_cohesiveness(solution, LM_database)
+
+            # Try reducing to three objectives to simplify problem
+            #objective 1 - LM fitness for the learner
+            normalized_score = (((difficulty_matching_average + CTML_average_normalized + media_matching_average +
+                                average_cohesiveness + normalized_segmenting + normalized_MDIP +
+                                normalized_average_coherence + normalized_average_balanced_cover) / 10)*3)+1
+
+            rubric_scores = {
+                "LM_Difficulty_Matching": 1,
+                "CTML_Principle": 1,
+                "media_matching": 1,
+                "time_interval_score": 1,
+                "coherence_principle": 1,
+                "segmenting_principle": 1,
+                "balance": 1,
+                "cohesiveness": 1,
+                "MDIP": 1,
+                "Rubric Average": 1
+            }
+
+            if difficulty_matching_average >= 0.75:
+                rubric_scores["LM_Difficulty_Matching"] = 4
+            elif difficulty_matching_average >= 0.5:
+                rubric_scores["LM_Difficulty_Matching"] = 3
+            elif difficulty_matching_average >= 0.25:
+                rubric_scores["LM_Difficulty_Matching"] = 2
+
+            if CTML_average >= 3.25:
+                rubric_scores["CTML_Principle"] = 4
+            elif CTML_average >= 2.5:
+                rubric_scores["CTML_Principle"] = 3
+            elif CTML_average >= 1.75:
+                rubric_scores["CTML_Principle"] = 2
+
+            if media_matching_average >= 0.75:
+                rubric_scores["media_matching"] = 4
+            elif media_matching_average >= 0.5:
+                rubric_scores["media_matching"] = 3
+            elif media_matching_average >= 0.25:
+                rubric_scores["media_matching"] = 2
+
+            if min_time < total_duration < max_time:
+                rubric_scores["time_interval_score"] = 4
+            else:
+                if total_duration < min_time:
+                    if 0 < abs(total_duration - min_time) / min_time <= 0.1:
+                        rubric_scores["time_interval_score"] = 3
+                    elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2:
+                        rubric_scores["time_interval_score"] = 2
+                if total_duration > max_time:
+                    if 0 < abs(total_duration - max_time) / max_time <= 0.1:
+                        rubric_scores["time_interval_score"] = 3
+                    elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2:
+                        rubric_scores["time_interval_score"] = 2
+
+            if average_coherence <= 0.25:
+                rubric_scores["coherence_principle"] = 4
+            elif average_coherence <= 0.5:
+                rubric_scores["coherence_principle"] = 3
+            elif average_coherence <= 1.0:
+                rubric_scores["coherence_principle"] = 2
+
+            if average_segmenting <= 2:
+                rubric_scores["segmenting_principle"] = 4
+            elif average_segmenting <= 3:
+                rubric_scores["segmenting_principle"] = 3
+            elif average_segmenting <= 4:
+                rubric_scores["segmenting_principle"] = 2
+
+            if average_cohesiveness >= 0.75:
+                rubric_scores["cohesiveness"] = 4
+            elif average_cohesiveness >= 0.5:
+                rubric_scores["cohesiveness"] = 3
+            elif average_cohesiveness >= 0.25:
+                rubric_scores["cohesiveness"] = 2
+
+            if average_balanced_cover <= 1:
+                rubric_scores["balance"] = 4
+            elif average_balanced_cover <= 2.9:
+                rubric_scores["balance"] = 3
+            elif average_balanced_cover <= 4.9:
+                rubric_scores["balance"] = 2
+
+            if MDIP_average >= 4:
+                rubric_scores["MDIP"] = 4
+            elif MDIP_average >= 3:
+                rubric_scores["MDIP"] = 3
+            elif MDIP_average >= 2:
+                rubric_scores["MDIP"] = 2
+
+            rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
+            time_compliance = ((max_time_compliance * 0.5 + min_time_compliance * 0.5) * 3) + 1
+            #time_compliance = 2 / ((0.5 / max_time_compliance) + (0.5 / min_time_compliance)) if max_time_compliance > 0 and min_time_compliance > 0 else 0
+            #if time_compliance > 0: time_compliance = (time_compliance * 3)+ 1
+
+            return [rubric_scores["Rubric Average"], normalized_score, time_compliance]
+
+
             #return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
             #        min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
 
         # GA Parameters
         # Maybe consider high population, low inclusion probability, and high mutation?
-        num_generations = 500
+        num_generations = 200
         num_parents_mating = 25
-        sol_per_pop = 250
+        sol_per_pop = 100
         num_genes = len(LM_database)
+        #At 0.5 incusion_probability is strong for high time-frame students.
         inclusion_probability = 0.5
         # Consider a heuristic where we do a sweep of low and high-density chromosomes.
         inclusion_probability_non_KS = 0.05
@@ -696,7 +859,8 @@ for student_profile_id in range(len(profile_database)):
 
         # Define Rubric Parameters that will be used in the GA Fitness Function
         # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
-        Rubric_max_time = math.ceil(max_time * 1.5)
+        #Rubric_max_time = math.ceil(max_time * 1.5)
+        Rubric_max_time = global_max_time
         Rubric_min_time = math.floor(min_time * 0.5)
         Rubric_max_coherence = 1.1
         max_average_balanced_cover = 5
@@ -717,21 +881,27 @@ for student_profile_id in range(len(profile_database)):
                                sol_per_pop=sol_per_pop,  # Increased population size
                                num_genes=num_genes,
                                gene_space=gene_space,
-                               #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 4),
+                               #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 2),
                                #initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
-                               initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
+                               #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
+                               initial_population= generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
                                fitness_func=fitness_func,
                                #parallel_processing=["process", 24],
-                               parent_selection_type='nsga2',  # Changed parent selection
-                               mutation_type='scramble',  # Changed mutation type
-                               mutation_probability=0.1,  # Adjust mutation probability
+                               #parent_selection_type='nsga2',  # Changed parent selection
+                               parent_selection_type="nsga2",
+                               mutation_type='random',  # Changed mutation type
+                               mutation_probability=0.5,  # Adjust mutation probability
                                crossover_type='two_points',  # Change crossover type
                                crossover_probability=0.2,  # adjust crossover probability
+                               keep_elitism=5
                                #save_solutions=True
                                )
 
 
         ga_instance.run()
+        ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average', 'Time Compliance'])
+        #ga_instance.plot_genes()
+        #ga_instance.plot_new_solution_rate()
         #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
         #                                'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting',
         #                                'Normalized Balanced Cover', 'Average Cohesiveness'])
@@ -781,199 +951,200 @@ for student_profile_id in range(len(profile_database)):
 
         #pareto_fronts = ga_instance.pareto_fronts
         #print("The length of the pareto front is: ", len(pareto_fronts))
-        solutions = ga_instance.population
+        # solutions = ga_instance.population
+        #
+        # all_unique_solutions = []
+        # for candidate_solution in solutions:
+        #     candidate_solution = np.round(candidate_solution).astype(int)
+        #
+        #     # Check for uniqueness against the *master* list:
+        #     is_unique = True
+        #     for existing_solution in all_unique_solutions:
+        #         if np.array_equal(candidate_solution, existing_solution):
+        #             is_unique = False
+        #             break
+        #
+        #     if is_unique:
+        #         all_unique_solutions.append(candidate_solution)
+        #
+        # #print(len(all_unique_solutions))
+        # #print(all_unique_solutions)
+        #
+        # print("Evaluating GA population")
+        # best_solution = []
+        # best_score = 0
+        # best_rubric_scores = {}
+        # best_raw_data = {}
+        #
+        # for candidate_solution in all_unique_solutions:
+        total_difficulty_score = 0
+        total_media_score = 0
+        total_CTML_score = 0
+        total_time = 0
+        count = 0
+        total_covering_non_goals = 0
+        total_covering_goals = 0
 
-        all_unique_solutions = []
-        for candidate_solution in solutions:
-            candidate_solution = np.round(candidate_solution).astype(int)
+        # Iterate through the candidate learning path and match scores
+        for i in range(len(solution)):
+            if solution[i] == 1:
+                # Add up the number of non-goal KNs covered by learning material
+                for kn in LM_KNs_Covered[i]:
+                    if kn not in KS_names:
+                        total_covering_non_goals += 1
+                    else:
+                        total_covering_goals += 1
+                total_media_score += LM_overall_preference_score[i]
+                total_difficulty_score += matching_scores[i]
+                total_CTML_score += lm_CTML_score[i]
+                total_time += lm_time_taken[i]
+                count += 1
 
-            # Check for uniqueness against the *master* list:
-            is_unique = True
-            for existing_solution in all_unique_solutions:
-                if np.array_equal(candidate_solution, existing_solution):
-                    is_unique = False
-                    break
+        balanced_cover_total = 0
+        for kn in KS_names:
+            num_coverings = 0
+            for i in range(len(solution)):
+                if solution[i] == 1:
+                    if kn in LM_KNs_Covered[i]: num_coverings += 1
+            balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
+        balanced_average = balanced_cover_total / len(KS_names)
+        #print("Average Balanced Cover is: ", balanced_average)
+        # End Balanced Cover Section
 
-            if is_unique:
-                all_unique_solutions.append(candidate_solution)
+        # Calculate average matching score
+        average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
+        average_media_preference_score = total_media_score / count if count > 0 else 0
+        average_CTML_score = total_CTML_score / count if count > 0 else 0
+        average_coherence = total_covering_non_goals / count if count > 0 else 0
+        multiple_document_principle_average = total_covering_goals / len(KS_names)
+        average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
 
-        #print(len(all_unique_solutions))
-        #print(all_unique_solutions)
+        included_embeddings = [LM_database['embeddings'][i] for i in range(len(LM_database)) if
+                               solution[i] == 1]
 
-        print("Evaluating GA population")
-        best_solution = []
-        best_score = 0
-        best_rubric_scores = {}
-        best_raw_data = {}
+        num_included_LMs = len(included_embeddings)
+        total_similarity = 0
+        count = 0
 
-        for candidate_solution in all_unique_solutions:
-            total_difficulty_score = 0
-            total_media_score = 0
-            total_CTML_score = 0
-            total_time = 0
-            count = 0
-            total_covering_non_goals = 0
-            total_covering_goals = 0
+        for i in range(num_included_LMs):
+            for j in range(i + 1, num_included_LMs):
+                similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
+                normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
+                total_similarity += normalized_similarity
+                count += 1
 
-            # Iterate through the candidate learning path and match scores
-            for i in range(len(candidate_solution)):
-                if candidate_solution[i] == 1:
-                    # Add up the number of non-goal KNs covered by learning material
-                    for kn in LM_KNs_Covered[i]:
-                        if kn not in KS_names:
-                            total_covering_non_goals += 1
-                        else:
-                            total_covering_goals += 1
-                    total_media_score += LM_overall_preference_score[i]
-                    total_difficulty_score += matching_scores[i]
-                    total_CTML_score += lm_CTML_score[i]
-                    total_time += lm_time_taken[i]
-                    count += 1
+        average_cohesiveness = total_similarity / count if count > 0 else 0
 
-            balanced_cover_total = 0
-            for kn in KS_names:
-                num_coverings = 0
-                for i in range(len(candidate_solution)):
-                    if candidate_solution[i] == 1:
-                        if kn in LM_KNs_Covered[i]: num_coverings += 1
-                balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
-            balanced_average = balanced_cover_total / len(KS_names)
-            #print("Average Balanced Cover is: ", balanced_average)
-            # End Balanced Cover Section
+        raw_data = {
+            "Student_id": int(student_profile_id),
+            "Personalized Learning Path": str(solution),
+            "Total number of LMs": num_included_LMs,
+            "Difficulty Average": average_difficulty_matching_score,
+            "Media Matching Average": average_media_preference_score,
+            "CTML Average": average_CTML_score,
+            "Cohesiveness Average": average_cohesiveness,
+            "Balance Average": balanced_average,
+            "PLP Duration": total_time,
+            "Coherence Average": average_coherence,
+            "Segmenting Average": average_segmenting_principle,
+            "MDIP Average": multiple_document_principle_average
+        }
 
-            # Calculate average matching score
-            average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
-            average_media_preference_score = total_media_score / count if count > 0 else 0
-            average_CTML_score = total_CTML_score / count if count > 0 else 0
-            average_coherence = total_covering_non_goals / count if count > 0 else 0
-            multiple_document_principle_average = total_covering_goals / len(KS_names)
-            average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
+        rubric_scores = {
+            "LM_Difficulty_Matching": 1,
+            "CTML_Principle": 1,
+            "media_matching": 1,
+            "time_interval_score": 1,
+            "coherence_principle": 1,
+            "segmenting_principle": 1,
+            "balance": 1,
+            "cohesiveness": 1,
+            "MDIP": 1,
+            "Rubric Average": 1
+        }
 
-            included_embeddings = [LM_database['embeddings'][i] for i in range(len(LM_database)) if
-                                   candidate_solution[i] == 1]
+        if average_difficulty_matching_score >= 0.75:
+            rubric_scores["LM_Difficulty_Matching"] = 4
+        elif average_difficulty_matching_score >= 0.5:
+            rubric_scores["LM_Difficulty_Matching"] = 3
+        elif average_difficulty_matching_score >= 0.25:
+            rubric_scores["LM_Difficulty_Matching"] = 2
 
-            num_included_LMs = len(included_embeddings)
-            total_similarity = 0
-            count = 0
+        if average_CTML_score >= 3.25:
+            rubric_scores["CTML_Principle"] = 4
+        elif average_CTML_score >= 2.5:
+            rubric_scores["CTML_Principle"] = 3
+        elif average_CTML_score >= 1.75:
+            rubric_scores["CTML_Principle"] = 2
 
-            for i in range(num_included_LMs):
-                for j in range(i + 1, num_included_LMs):
-                    similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
-                    normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
-                    total_similarity += normalized_similarity
-                    count += 1
+        if average_media_preference_score >= 0.75:
+            rubric_scores["media_matching"] = 4
+        elif average_media_preference_score >= 0.5:
+            rubric_scores["media_matching"] = 3
+        elif average_media_preference_score >= 0.25:
+            rubric_scores["media_matching"] = 2
 
-            average_cohesiveness = total_similarity / count if count > 0 else 0
+        if min_time < total_time < max_time:
+            rubric_scores["time_interval_score"] = 4
+        else:
+            if total_time < min_time:
+                if 0 < abs(total_time - min_time) / min_time <= 0.1:
+                    rubric_scores["time_interval_score"] = 3
+                elif 0.1 < abs(total_time - min_time) / min_time <= 0.2:
+                    rubric_scores["time_interval_score"] = 2
+            if total_time > max_time:
+                if 0 < abs(total_time - max_time) / max_time <= 0.1:
+                    rubric_scores["time_interval_score"] = 3
+                elif 0.1 < abs(total_time - max_time) / max_time <= 0.2:
+                    rubric_scores["time_interval_score"] = 2
 
-            raw_data = {
-                "Student_id": int(student_profile_id),
-                "Personalized Learning Path": str(candidate_solution),
-                "Total number of LMs": num_included_LMs,
-                "Difficulty Average": average_difficulty_matching_score,
-                "Media Matching Average": average_media_preference_score,
-                "CTML Average": average_CTML_score,
-                "Cohesiveness Average": average_cohesiveness,
-                "Balance Average": balanced_average,
-                "PLP Duration": total_time,
-                "Coherence Average": average_coherence,
-                "Segmenting Average": average_segmenting_principle,
-                "MDIP Average": multiple_document_principle_average
-            }
+        if average_coherence <= 0.25:
+            rubric_scores["coherence_principle"] = 4
+        elif average_coherence <= 0.5:
+            rubric_scores["coherence_principle"] = 3
+        elif average_coherence <= 1.0:
+            rubric_scores["coherence_principle"] = 2
 
-            rubric_scores = {
-                "LM_Difficulty_Matching": 1,
-                "CTML_Principle": 1,
-                "media_matching": 1,
-                "time_interval_score": 1,
-                "coherence_principle": 1,
-                "segmenting_principle": 1,
-                "balance": 1,
-                "cohesiveness": 1,
-                "MDIP": 1,
-                "Rubric Average": 1
-            }
+        if average_segmenting_principle <= 2:
+            rubric_scores["segmenting_principle"] = 4
+        elif average_segmenting_principle <= 3:
+            rubric_scores["segmenting_principle"] = 3
+        elif average_segmenting_principle <= 4:
+            rubric_scores["segmenting_principle"] = 2
 
-            if average_difficulty_matching_score >= 0.75:
-                rubric_scores["LM_Difficulty_Matching"] = 4
-            elif average_difficulty_matching_score >= 0.5:
-                rubric_scores["LM_Difficulty_Matching"] = 3
-            elif average_difficulty_matching_score >= 0.25:
-                rubric_scores["LM_Difficulty_Matching"] = 2
+        if average_cohesiveness >= 0.75:
+            rubric_scores["cohesiveness"] = 4
+        elif average_cohesiveness >= 0.5:
+            rubric_scores["cohesiveness"] = 3
+        elif average_cohesiveness >= 0.25:
+            rubric_scores["cohesiveness"] = 2
 
-            if average_CTML_score >= 3.25:
-                rubric_scores["CTML_Principle"] = 4
-            elif average_CTML_score >= 2.5:
-                rubric_scores["CTML_Principle"] = 3
-            elif average_CTML_score >= 1.75:
-                rubric_scores["CTML_Principle"] = 2
+        if balanced_average <= 1:
+            rubric_scores["balance"] = 4
+        elif balanced_average <= 2.9:
+            rubric_scores["balance"] = 3
+        elif balanced_average <= 4.9:
+            rubric_scores["balance"] = 2
 
-            if average_media_preference_score >= 0.75:
-                rubric_scores["media_matching"] = 4
-            elif average_media_preference_score >= 0.5:
-                rubric_scores["media_matching"] = 3
-            elif average_media_preference_score >= 0.25:
-                rubric_scores["media_matching"] = 2
+        if multiple_document_principle_average >= 4:
+            rubric_scores["MDIP"] = 4
+        elif multiple_document_principle_average >= 3:
+            rubric_scores["MDIP"] = 3
+        elif multiple_document_principle_average >= 2:
+            rubric_scores["MDIP"] = 2
 
-            if min_time < total_time < max_time:
-                rubric_scores["time_interval_score"] = 4
-            else:
-                if total_time < min_time:
-                    if 0 < abs(total_time - min_time) / min_time <= 0.1:
-                        rubric_scores["time_interval_score"] = 3
-                    elif 0.1 < abs(total_time - min_time) / min_time <= 0.2:
-                        rubric_scores["time_interval_score"] = 2
-                if total_time > max_time:
-                    if 0 < abs(total_time - max_time) / max_time <= 0.1:
-                        rubric_scores["time_interval_score"] = 3
-                    elif 0.1 < abs(total_time - max_time) / max_time <= 0.2:
-                        rubric_scores["time_interval_score"] = 2
+        rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
 
-            if average_coherence <= 0.25:
-                rubric_scores["coherence_principle"] = 4
-            elif average_coherence <= 0.5:
-                rubric_scores["coherence_principle"] = 3
-            elif average_coherence <= 1.0:
-                rubric_scores["coherence_principle"] = 2
+        print("Rubric average is:", rubric_scores["Rubric Average"])
 
-            if average_segmenting_principle <= 2:
-                rubric_scores["segmenting_principle"] = 4
-            elif average_segmenting_principle <= 3:
-                rubric_scores["segmenting_principle"] = 3
-            elif average_segmenting_principle <= 4:
-                rubric_scores["segmenting_principle"] = 2
-
-            if average_cohesiveness >= 0.75:
-                rubric_scores["cohesiveness"] = 4
-            elif average_cohesiveness >= 0.5:
-                rubric_scores["cohesiveness"] = 3
-            elif average_cohesiveness >= 0.25:
-                rubric_scores["cohesiveness"] = 2
-
-            if balanced_average <= 1:
-                rubric_scores["balance"] = 4
-            elif balanced_average <= 2.9:
-                rubric_scores["balance"] = 3
-            elif balanced_average <= 4.9:
-                rubric_scores["balance"] = 2
-
-            if multiple_document_principle_average >= 4:
-                rubric_scores["MDIP"] = 4
-            elif multiple_document_principle_average >= 3:
-                rubric_scores["MDIP"] = 3
-            elif multiple_document_principle_average >= 2:
-                rubric_scores["MDIP"] = 2
-
-            rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
-
-            #print("Rubric average is:", rubric_scores["Rubric Average"])
-
-            if (rubric_scores["Rubric Average"]) >= best_score:
-                best_score = rubric_scores["Rubric Average"]
-                best_solution = candidate_solution
-                best_raw_data = raw_data
-                best_rubric_scores = rubric_scores
+        # if (rubric_scores["Rubric Average"]) >= best_score:
+        #     best_score = rubric_scores["Rubric Average"]
+        #     best_solution = candidate_solution
+        #     best_raw_data = raw_data
+        #     best_rubric_scores = rubric_scores
+        #
         print("Best score for student: ", student_profile_id, " is ",  rubric_scores["Rubric Average"])
-        combined_data = {**best_raw_data, **best_rubric_scores}
+        combined_data = {**raw_data, **rubric_scores}
         combined_data_df = pd.DataFrame(combined_data, index=[0])
         experiment_df = pd.concat([experiment_df, combined_data_df], ignore_index=True)
 
