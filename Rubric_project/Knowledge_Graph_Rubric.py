@@ -445,6 +445,20 @@ for student_profile_id in range(len(profile_database)):
     if run_GA:
         gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
+        def generate_initial_population(population_size, num_genes, inclusion_probability):
+            population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
+
+            i = 0
+            while i < population_size:
+                solution = np.random.choice([0, 1], num_genes, p=[1 - inclusion_probability, inclusion_probability])
+                num_LMs = np.sum(solution)  # More efficient way to count 1s
+                if num_LMs >= 2:
+                    population[i] = solution  # Assign directly to the pre-allocated array
+                    i += 1
+
+            print("Initial population is complete")
+            return population
+
 
         def generate_initial_population_sliding_probability(population_size, num_genes, KS_names, LM_KNs_Covered,
                                                             ratio):
@@ -883,8 +897,7 @@ for student_profile_id in range(len(profile_database)):
                                gene_space=gene_space,
                                #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 2),
                                #initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
-                               #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
-                               initial_population= generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
+                               initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
                                fitness_func=fitness_func,
                                #parallel_processing=["process", 24],
                                #parent_selection_type='nsga2',  # Changed parent selection
