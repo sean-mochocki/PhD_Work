@@ -1,10 +1,7 @@
 import igraph as ig
 import pandas as pd
 import ast
-import os
-from scipy.stats import pearsonr, spearmanr
 from sklearn.preprocessing import OneHotEncoder
-import spacy
 import seaborn as sns
 from sentence_transformers import SentenceTransformer, util
 import matplotlib.pyplot as plt
@@ -464,6 +461,54 @@ for student_profile_id in range(len(profile_database)):
             return population
 
 
+        def generate_initial_population_sliding_probability(population_size, num_genes, KS_names, LM_KNs_Covered,
+                                                            ratio):
+            """
+            Generates an initial population with sliding inclusion probabilities.
+
+            Args:
+                population_size: The number of solutions in the population.
+                num_genes: The number of learning materials (genes).
+                KS_names: A list of Knowledge Statement names.
+                LM_KNs_Covered: A list of sets, where each set contains the KNs covered by a learning material.
+                ratio: an integer describing the probability of inclusion of LMs that cover goal KNs vs non-goal KNs
+            Returns:
+                A NumPy array representing the initial population.
+            """
+
+            population = np.zeros((population_size, num_genes), dtype=int)
+            i = 1  # Start at i = 1
+
+            # Calculate probability increment
+            probability_increment = 1.0 / (population_size - 1) if population_size > 1 else 1.0
+
+            while i < population_size + 1:  # Iterate up to population_size + 1
+                solution = np.zeros(num_genes, dtype=int)  # Initialize solution with zeros
+
+                # Calculate base probability for non-KS LMs
+                base_probability = i * probability_increment
+                base_probability = min(base_probability, 1.0)  # Ensure base probability never exceeds 1.0
+
+                for gene_index in range(num_genes):
+                    covered_kn_names = LM_KNs_Covered[gene_index]
+                    covers_ks = any(kn_name in KS_names for kn_name in covered_kn_names)
+
+                    if covers_ks:
+                        inclusion_prob = min(base_probability * ratio,
+                                             1.0)  # KS probability (ratio times, capped at 1.0)
+                    else:
+                        inclusion_prob = base_probability  # non-KS probability
+
+                    solution[gene_index] = np.random.choice([0, 1], p=[1 - inclusion_prob, inclusion_prob])
+
+                num_LMs = np.sum(solution)
+                if num_LMs >= 2:
+                    population[i - 1] = solution  # adjust for i starting at 1.
+                    i += 1
+
+            print("Initial population with sliding probability is complete")
+            return population
+
         def generate_initial_population_weighted(population_size, num_genes, inclusion_probability_non_KS,
                                                  inclusion_probability_KS, KS_names, LM_KNs_Covered):
             """
@@ -546,6 +591,8 @@ for student_profile_id in range(len(profile_database)):
         # If we do this and we get a pareto front, we could then grade the pareto front according to the rubric and return the front with the best
         # average metrics to the learner.
 
+        # Consider going to single objective and returning the average Rubric score inside the fitness function.
+
         def fitness_func(ga_instance, solution, solution_idx):
             solution = np.round(solution).astype(int)  # Round and cast to int
             included_indices = np.where(solution == 1)[0]
@@ -623,20 +670,29 @@ for student_profile_id in range(len(profile_database)):
 
             average_cohesiveness = calculate_cohesiveness(solution, LM_database)
 
+            # Try reducing to three objectives to simplify problem
+            #objective 1 - LM fitness for the learner
+            objective1 = (difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness) / 4
+            #objective 2 - LM coverage of the KNs
+            objective2 = (normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_average_balanced_cover) / 4
+            #objective 3 - Honoring of learner time constraints
+            objective3 = 2 / ((0.5 / max_time_compliance) + (0.5 / min_time_compliance)) if max_time_compliance > 0 and min_time_compliance > 0 else 0
 
+            return [objective1, objective2, objective3]
 
-            return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
-                    min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
+            #return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
+            #        min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
 
         # GA Parameters
         # Maybe consider high population, low inclusion probability, and high mutation?
-        num_generations = 200
-        num_parents_mating = 50
-        sol_per_pop = 200
+        num_generations = 500
+        num_parents_mating = 25
+        sol_per_pop = 250
         num_genes = len(LM_database)
-        inclusion_probability = 0.15
+        inclusion_probability = 0.5
+        # Consider a heuristic where we do a sweep of low and high-density chromosomes.
         inclusion_probability_non_KS = 0.05
-        inclusion_probability_KS = 0.4
+        inclusion_probability_KS = 0.3
 
         # Define Rubric Parameters that will be used in the GA Fitness Function
         # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
@@ -661,14 +717,17 @@ for student_profile_id in range(len(profile_database)):
                                sol_per_pop=sol_per_pop,  # Increased population size
                                num_genes=num_genes,
                                gene_space=gene_space,
-                               initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
-                               #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
+                               #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 4),
+                               #initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
+                               initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
                                fitness_func=fitness_func,
+                               #parallel_processing=["process", 24],
                                parent_selection_type='nsga2',  # Changed parent selection
                                mutation_type='scramble',  # Changed mutation type
                                mutation_probability=0.1,  # Adjust mutation probability
                                crossover_type='two_points',  # Change crossover type
-                               crossover_probability=0.2  # adjust crossover probability
+                               crossover_probability=0.2,  # adjust crossover probability
+                               #save_solutions=True
                                )
 
 
@@ -676,7 +735,8 @@ for student_profile_id in range(len(profile_database)):
         #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
         #                                'Min Time Compliance', 'Normalized Average Coherence', 'Normalized MDIP', 'Normalized Segmenting',
         #                                'Normalized Balanced Cover', 'Average Cohesiveness'])
-
+        #ga_instance.plot_new_solution_rate()
+        #ga_instance.plot_fitness(["objective1", "objective2", "objective3"])
         print("Finished running GA")
 
         solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
@@ -912,7 +972,7 @@ for student_profile_id in range(len(profile_database)):
                 best_solution = candidate_solution
                 best_raw_data = raw_data
                 best_rubric_scores = rubric_scores
-
+        print("Best score for student: ", student_profile_id, " is ",  rubric_scores["Rubric Average"])
         combined_data = {**best_raw_data, **best_rubric_scores}
         combined_data_df = pd.DataFrame(combined_data, index=[0])
         experiment_df = pd.concat([experiment_df, combined_data_df], ignore_index=True)
