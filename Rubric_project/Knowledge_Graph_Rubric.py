@@ -531,6 +531,41 @@ for student_profile_id in range(len(profile_database)):
                 population[time_interval_seeds_count + matching_scores_seeds_count + KS_names_seeds_count:population_size, :] = random_population
 
             np.random.shuffle(population)
+
+            # Check to confirm if all KNs are covered by LMs. If not - add LMs randomly until all KNs are covered
+            for chromosome in population:
+                # Check coverage for each KN in KS_names
+                while True:
+                    kn_coverage = {kn: False for kn in KS_names}  # track coverage
+
+                    for i, lm_active in enumerate(chromosome):
+                        if lm_active:
+                            for kn in LM_KNs_Covered[i]:
+                                if kn in kn_coverage:
+                                    kn_coverage[kn] = True
+
+                    if all(kn_coverage.values()):  # All KNs covered, break the loop
+                        break
+
+                    # If not all KNs are covered, randomly flip LMs to fix it
+                    missing_kns = [kn for kn, covered in kn_coverage.items() if not covered]
+
+                    # Find LMs that cover the missing KNs.
+                    potential_lms_to_flip = []
+                    for kn in missing_kns:
+                        for i, covered_kns in enumerate(LM_KNs_Covered):
+                            if kn in covered_kns:
+                                potential_lms_to_flip.append(i)
+
+                    if not potential_lms_to_flip:
+                        # This should rarely happen, but it's a safety check.
+                        # If no LMs cover the missing KNs, raise an error or handle accordingly.
+                        print("Error: No LMs cover all missing KNs. Check LM_KNs_Covered.")
+                        return population  # or raise an error
+
+                    lm_to_flip = random.choice(potential_lms_to_flip)
+                    chromosome[lm_to_flip] = 1 - chromosome[lm_to_flip]  # Flip the LM
+
             print("initial population is complete")
             return population
 
@@ -762,10 +797,18 @@ for student_profile_id in range(len(profile_database)):
             included_indices = np.where(solution == 1)[0]
             num_LMs = len(included_indices)
 
-            #Ensure a minimum of two Learning Materials
-            if num_LMs <= 2:
 
-                return [0, 0]
+            # Check for complete set cover - otherwise invalidate potential solution
+            kn_coverage = {kn: False for kn in KS_names}
+
+            for i, lm_active in enumerate(solution):
+                if lm_active:
+                    for kn in LM_KNs_Covered[i]:
+                        if kn in kn_coverage:
+                            kn_coverage[kn] = True
+
+            if not all(kn_coverage.values()):
+                return [0, 0]  # Not a valid set cover
 
             difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
             difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
@@ -832,8 +875,6 @@ for student_profile_id in range(len(profile_database)):
             normalized_segmenting = normalize_segmenting(average_segmenting, Rubric_max_segmenting, num_LMs)
 
             average_cohesiveness = calculate_cohesiveness(solution, LM_database)
-
-
 
             rubric_scores = {
                 "LM_Difficulty_Matching": 1,
@@ -936,9 +977,11 @@ for student_profile_id in range(len(profile_database)):
             #        min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
 
         # GA Parameters
-        # Maybe consider high population, low inclusion probability, and high mutation?
-        num_seeds = 15 # Indicates numbers of seeds to be included in population per category
-        num_generations = 100
+        # We need to add the requirement of a set cover to the genetic algorithm. All KNs in KS_names need to be covered by at least 1 LM for a solution to be valid
+        # This necessitates a change to the population
+
+        num_seeds = 10 # Indicates numbers of seeds to be included in population per category
+        num_generations = 50
         num_parents_mating = 25
         sol_per_pop = 100
         num_genes = len(LM_database)
@@ -985,20 +1028,21 @@ for student_profile_id in range(len(profile_database)):
                                mutation_probability=0.5,  # Adjust mutation probability
                                crossover_type='two_points',  # Change crossover type
                                crossover_probability=0.2,  # adjust crossover probability
-                               keep_elitism=5
+                               keep_elitism=2
                                #save_solutions=True
                                )
 
 
         ga_instance.run()
-        #ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average', 'Time Compliance'])
-        filename = "student_" + str(student_profile_id) + ".png"
-
-        experiment_dir = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/"
-        filepath = os.path.join(experiment_dir, filename)
-        fig = ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'], plot_type = "plot", title = "Student_" + str(student_profile_id))
-        plt.savefig(filepath)
-        plt.close(fig)
+        ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'])
+        # filename = "student_" + str(student_profile_id) + ".png"
+        #
+        # experiment_dir = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/"
+        # filepath = os.path.join(experiment_dir, filename)
+        #ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'], plot_type = "plot", title = "Student_" + str(student_profile_id))
+        # plt.draw()
+        # plt.savefig(filepath)
+        # plt.close(fig)
         #ga_instance.plot_genes()
         #ga_instance.plot_new_solution_rate()
         #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
