@@ -9,6 +9,7 @@ import numpy as np
 import pygad
 import torch
 import math
+import random
 
 knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
@@ -460,6 +461,54 @@ for student_profile_id in range(len(profile_database)):
             return population
 
 
+        def generate_initial_population_time_interval_seeds(population_size, num_genes, lm_time_taken, min_time, max_time, num_time_interval_seeds):
+            population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
+            lm_time_taken = np.array(lm_time_taken)
+
+            if population_size <= num_time_interval_seeds: num_time_interval_seeds = population_size
+
+            time_interval_seeds_count = 0
+
+            while time_interval_seeds_count < num_time_interval_seeds:
+                original_indices = np.argsort(lm_time_taken)[::-1]  # sort in descending order
+                sorted_times = lm_time_taken[original_indices]
+                included_LM_indices = []
+                probability = 0.5
+                current_time = 0
+
+                #Creating this code will be composed of deterministic and stochastic steps
+                while current_time < min_time and len(sorted_times) > 0:
+                    if random.random() < probability:
+                        included_LM_indices.append(original_indices[0])
+                        current_time += sorted_times[0]
+                        sorted_times = np.delete(sorted_times, 0)
+                        original_indices = np.delete(original_indices, 0)
+                    else:
+                        if len(sorted_times) > 0:  # Check if sorted_times is not empty
+                            random_index = random.randint(0, len(sorted_times) - 1)  # get a random index
+                            random_num = sorted_times[random_index]
+                            if current_time + random_num <= max_time:
+                                included_LM_indices.append(original_indices[random_index])  # append the original index.
+                                current_time += random_num
+                                sorted_times = np.delete(sorted_times, random_index)
+                                original_indices = np.delete(original_indices, random_index)
+
+                if min_time <= current_time <= max_time and len(included_LM_indices) >= 2:
+                    print("Time of initialized PLP is:", current_time)
+                    for lm_index in included_LM_indices:
+                        population[time_interval_seeds_count, lm_index] = 1
+
+                    time_interval_seeds_count = time_interval_seeds_count + 1
+                else: pass
+
+            remaining_population_size = population_size - time_interval_seeds_count
+            if remaining_population_size > 0:
+                random_population = np.random.choice([0, 1], size=(remaining_population_size, num_genes), p=[0.5, 0.5])
+                population[time_interval_seeds_count:population_size, :] = random_population
+
+            print("initial population is complete")
+            return population
+
         def generate_initial_population_sliding_probability(population_size, num_genes, KS_names, LM_KNs_Covered,
                                                             ratio):
             """
@@ -895,9 +944,10 @@ for student_profile_id in range(len(profile_database)):
                                sol_per_pop=sol_per_pop,  # Increased population size
                                num_genes=num_genes,
                                gene_space=gene_space,
-                               #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 2),
+                               #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 1),
                                #initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
-                               initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
+                               #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
+                               initial_population = generate_initial_population_time_interval_seeds(sol_per_pop, num_genes, lm_time_taken, min_time, max_time, 10),
                                fitness_func=fitness_func,
                                #parallel_processing=["process", 24],
                                #parent_selection_type='nsga2',  # Changed parent selection
@@ -912,7 +962,8 @@ for student_profile_id in range(len(profile_database)):
 
 
         ga_instance.run()
-        ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average', 'Time Compliance'])
+        #ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average', 'Time Compliance'])
+
         #ga_instance.plot_genes()
         #ga_instance.plot_new_solution_rate()
         #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
@@ -965,7 +1016,7 @@ for student_profile_id in range(len(profile_database)):
         #pareto_fronts = ga_instance.pareto_fronts
         #print("The length of the pareto front is: ", len(pareto_fronts))
         # solutions = ga_instance.population
-        #
+        # #
         # all_unique_solutions = []
         # for candidate_solution in solutions:
         #     candidate_solution = np.round(candidate_solution).astype(int)
@@ -983,11 +1034,11 @@ for student_profile_id in range(len(profile_database)):
         # #print(len(all_unique_solutions))
         # #print(all_unique_solutions)
         #
-        # print("Evaluating GA population")
-        # best_solution = []
-        # best_score = 0
-        # best_rubric_scores = {}
-        # best_raw_data = {}
+        print("Evaluating GA population")
+        best_solution = []
+        best_score = 0
+        best_rubric_scores = {}
+        best_raw_data = {}
         #
         # for candidate_solution in all_unique_solutions:
         total_difficulty_score = 0
