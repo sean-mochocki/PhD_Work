@@ -475,25 +475,71 @@ for student_profile_id in range(len(profile_database)):
                 original_indices = np.argsort(lm_time_taken)[::-1]  # sort in descending order
                 sorted_times = lm_time_taken[original_indices]
                 included_LM_indices = []
-                probability = 0.5
+                probability = 0.75
                 current_time = 0
 
-                #Creating this code will be composed of deterministic and stochastic steps
+                # Creating this code will be composed of deterministic and stochastic steps
                 while current_time < min_time and len(sorted_times) > 0:
-                    if random.random() < probability:
-                        included_LM_indices.append(original_indices[0])
-                        current_time += sorted_times[0]
-                        sorted_times = np.delete(sorted_times, 0)
-                        original_indices = np.delete(original_indices, 0)
-                    else:
-                        if len(sorted_times) > 0:  # Check if sorted_times is not empty
-                            random_index = random.randint(0, len(sorted_times) - 1)  # get a random index
-                            random_num = sorted_times[random_index]
-                            if current_time + random_num <= max_time:
-                                included_LM_indices.append(original_indices[random_index])  # append the original index.
-                                current_time += random_num
-                                sorted_times = np.delete(sorted_times, random_index)
-                                original_indices = np.delete(original_indices, random_index)
+                    # Prioritize LMs that cover KS_names
+                    valid_lm_indices = []
+                    valid_lm_times = []
+                    for i, lm_index in enumerate(original_indices):
+                        if any(kn in LM_KNs_Covered[lm_index] for kn in KS_names) and current_time + sorted_times[i] <= max_time:
+                            valid_lm_indices.append(lm_index)
+                            valid_lm_times.append(sorted_times[i])
+
+                    if valid_lm_indices:  # If there are valid LMs that cover KS_names
+                        if random.random() < probability:
+                            # Deterministic step: Choose the first valid LM
+                            lm_index = valid_lm_indices[0]
+                            lm_time = valid_lm_times[0]
+                        else:
+                            # Stochastic step: Choose a random valid LM
+                            random_index = random.randint(0, len(valid_lm_indices) - 1)
+                            lm_index = valid_lm_indices[random_index]
+                            lm_time = valid_lm_times[random_index]
+
+                        included_LM_indices.append(lm_index)
+                        current_time += lm_time
+                        # Remove chosen LM from sorted_times and original_indices
+                        index_in_original = np.where(original_indices == lm_index)[0][0]
+                        original_indices = np.delete(original_indices, index_in_original)
+                        sorted_times = np.delete(sorted_times, index_in_original)
+
+                    else:  # If no LMs cover KS_names, choose any LM that fits the time constraint
+                        if random.random() < probability:
+                            if current_time + sorted_times[0] <= max_time:
+                                included_LM_indices.append(original_indices[0])
+                                current_time += sorted_times[0]
+                                sorted_times = np.delete(sorted_times, 0)
+                                original_indices = np.delete(original_indices, 0)
+                        else:
+                            if len(sorted_times) > 0:  # Check if sorted_times is not empty
+                                random_index = random.randint(0, len(sorted_times) - 1)  # get a random index
+                                random_num = sorted_times[random_index]
+                                if current_time + random_num <= max_time:
+                                    included_LM_indices.append(
+                                        original_indices[random_index])  # append the original index.
+                                    current_time += random_num
+                                    sorted_times = np.delete(sorted_times, random_index)
+                                    original_indices = np.delete(original_indices, random_index)
+
+                # #Creating this code will be composed of deterministic and stochastic steps
+                # while current_time < min_time and len(sorted_times) > 0:
+                #     if random.random() < probability:
+                #         included_LM_indices.append(original_indices[0])
+                #         current_time += sorted_times[0]
+                #         sorted_times = np.delete(sorted_times, 0)
+                #         original_indices = np.delete(original_indices, 0)
+                #     else:
+                #         if len(sorted_times) > 0:  # Check if sorted_times is not empty
+                #             random_index = random.randint(0, len(sorted_times) - 1)  # get a random index
+                #             random_num = sorted_times[random_index]
+                #             if current_time + random_num <= max_time:
+                #                 included_LM_indices.append(original_indices[random_index])  # append the original index.
+                #                 current_time += random_num
+                #                 sorted_times = np.delete(sorted_times, random_index)
+                #                 original_indices = np.delete(original_indices, random_index)
 
                 if min_time <= current_time <= max_time and len(included_LM_indices) >= 2:
                     #print("Time of initialized PLP is:", current_time)
@@ -1034,7 +1080,7 @@ for student_profile_id in range(len(profile_database)):
 
 
         ga_instance.run()
-        ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'])
+        #ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'])
         # filename = "student_" + str(student_profile_id) + ".png"
         #
         # experiment_dir = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/"
