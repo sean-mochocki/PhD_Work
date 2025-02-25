@@ -1,6 +1,7 @@
 import igraph as ig
 import pandas as pd
 import ast
+import os
 from sklearn.preprocessing import OneHotEncoder
 import seaborn as sns
 from sentence_transformers import SentenceTransformer, util
@@ -461,15 +462,16 @@ for student_profile_id in range(len(profile_database)):
             return population
 
 
-        def generate_initial_population_time_interval_seeds(population_size, num_genes, lm_time_taken, min_time, max_time, num_time_interval_seeds):
+        def generate_initial_population_seeds(population_size, num_genes, lm_time_taken, min_time, max_time, num_seeds, matching_scores, LM_overall_preference_score, LM_KNs_Covered, KS_names):
             population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
             lm_time_taken = np.array(lm_time_taken)
+            matching_scores = np.array(matching_scores)
 
-            if population_size <= num_time_interval_seeds: num_time_interval_seeds = population_size
+            if population_size <= num_seeds *3: num_seeds = population_size //3
 
             time_interval_seeds_count = 0
 
-            while time_interval_seeds_count < num_time_interval_seeds:
+            while time_interval_seeds_count < num_seeds:
                 original_indices = np.argsort(lm_time_taken)[::-1]  # sort in descending order
                 sorted_times = lm_time_taken[original_indices]
                 included_LM_indices = []
@@ -494,18 +496,41 @@ for student_profile_id in range(len(profile_database)):
                                 original_indices = np.delete(original_indices, random_index)
 
                 if min_time <= current_time <= max_time and len(included_LM_indices) >= 2:
-                    print("Time of initialized PLP is:", current_time)
+                    #print("Time of initialized PLP is:", current_time)
                     for lm_index in included_LM_indices:
                         population[time_interval_seeds_count, lm_index] = 1
 
                     time_interval_seeds_count = time_interval_seeds_count + 1
                 else: pass
 
-            remaining_population_size = population_size - time_interval_seeds_count
+            # Add random seeds where only LMs with favorable scores are included
+            matching_scores_seeds_count = 0
+            while matching_scores_seeds_count < num_seeds:
+                chromosome = np.zeros(num_genes, dtype=int)
+                for i, score in enumerate(matching_scores):
+                    if score > 0 and random.random() < 0.5:
+                        chromosome[i] = 1
+                population[time_interval_seeds_count + matching_scores_seeds_count] = chromosome
+                matching_scores_seeds_count += 1
+
+            # Add KS_Names seed section.
+            KS_names_seeds_count = 0
+            while KS_names_seeds_count < num_seeds:
+                chromosome = np.zeros(num_genes, dtype=int)
+                for lm_index, kn_list in enumerate(LM_KNs_Covered):
+                    if any(kn in kn_list for kn in KS_names) and random.random() < 0.5:
+                        chromosome[lm_index] = 1 if chromosome[lm_index] == 0 else 0  # flip the gene
+                population[
+                    time_interval_seeds_count + matching_scores_seeds_count + KS_names_seeds_count] = chromosome
+                KS_names_seeds_count += 1
+
+            remaining_population_size = population_size - (time_interval_seeds_count + matching_scores_seeds_count + KS_names_seeds_count)
+
             if remaining_population_size > 0:
                 random_population = np.random.choice([0, 1], size=(remaining_population_size, num_genes), p=[0.5, 0.5])
-                population[time_interval_seeds_count:population_size, :] = random_population
+                population[time_interval_seeds_count + matching_scores_seeds_count + KS_names_seeds_count:population_size, :] = random_population
 
+            np.random.shuffle(population)
             print("initial population is complete")
             return population
 
@@ -740,7 +765,7 @@ for student_profile_id in range(len(profile_database)):
             #Ensure a minimum of two Learning Materials
             if num_LMs <= 2:
 
-                return [0, 0, 0]
+                return [0, 0]
 
             difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
             difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
@@ -808,11 +833,7 @@ for student_profile_id in range(len(profile_database)):
 
             average_cohesiveness = calculate_cohesiveness(solution, LM_database)
 
-            # Try reducing to three objectives to simplify problem
-            #objective 1 - LM fitness for the learner
-            normalized_score = (((difficulty_matching_average + CTML_average_normalized + media_matching_average +
-                                average_cohesiveness + normalized_segmenting + normalized_MDIP +
-                                normalized_average_coherence + normalized_average_balanced_cover) / 10)*3)+1
+
 
             rubric_scores = {
                 "LM_Difficulty_Matching": 1,
@@ -898,11 +919,17 @@ for student_profile_id in range(len(profile_database)):
                 rubric_scores["MDIP"] = 2
 
             rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
-            time_compliance = ((max_time_compliance * 0.5 + min_time_compliance * 0.5) * 3) + 1
+            #time_compliance = ((max_time_compliance * 0.5 + min_time_compliance * 0.5) * 3) + 1
+            # Try reducing to three objectives to simplify problem
+            #objective 1 - LM fitness for the learner
+            normalized_score = (((difficulty_matching_average + CTML_average_normalized + media_matching_average +
+                                average_cohesiveness + normalized_segmenting + normalized_MDIP +
+                                normalized_average_coherence + normalized_average_balanced_cover + max_time_compliance + min_time_compliance) / 10)*3)+1
+
             #time_compliance = 2 / ((0.5 / max_time_compliance) + (0.5 / min_time_compliance)) if max_time_compliance > 0 and min_time_compliance > 0 else 0
             #if time_compliance > 0: time_compliance = (time_compliance * 3)+ 1
 
-            return [rubric_scores["Rubric Average"], normalized_score, time_compliance]
+            return [rubric_scores["Rubric Average"], normalized_score]
 
 
             #return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
@@ -910,7 +937,8 @@ for student_profile_id in range(len(profile_database)):
 
         # GA Parameters
         # Maybe consider high population, low inclusion probability, and high mutation?
-        num_generations = 200
+        num_seeds = 15 # Indicates numbers of seeds to be included in population per category
+        num_generations = 100
         num_parents_mating = 25
         sol_per_pop = 100
         num_genes = len(LM_database)
@@ -947,7 +975,8 @@ for student_profile_id in range(len(profile_database)):
                                #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 1),
                                #initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
                                #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
-                               initial_population = generate_initial_population_time_interval_seeds(sol_per_pop, num_genes, lm_time_taken, min_time, max_time, 10),
+                               initial_population = generate_initial_population_seeds(sol_per_pop, num_genes, lm_time_taken,
+                                                                                      min_time, max_time, num_seeds, matching_scores, LM_overall_preference_score, LM_KNs_Covered, KS_names),
                                fitness_func=fitness_func,
                                #parallel_processing=["process", 24],
                                #parent_selection_type='nsga2',  # Changed parent selection
@@ -963,7 +992,13 @@ for student_profile_id in range(len(profile_database)):
 
         ga_instance.run()
         #ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average', 'Time Compliance'])
+        filename = "student_" + str(student_profile_id) + ".png"
 
+        experiment_dir = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/"
+        filepath = os.path.join(experiment_dir, filename)
+        fig = ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'], plot_type = "plot", title = "Student_" + str(student_profile_id))
+        plt.savefig(filepath)
+        plt.close(fig)
         #ga_instance.plot_genes()
         #ga_instance.plot_new_solution_rate()
         #ga_instance.plot_fitness(label=['LM Difficulty Matching', 'CTML Principle', 'Media Matching', 'Max Time Compliance',
@@ -1034,13 +1069,13 @@ for student_profile_id in range(len(profile_database)):
         # #print(len(all_unique_solutions))
         # #print(all_unique_solutions)
         #
-        print("Evaluating GA population")
-        best_solution = []
-        best_score = 0
-        best_rubric_scores = {}
-        best_raw_data = {}
+        # print("Evaluating GA population")
+        # best_solution = []
+        # best_score = 0
+        # best_rubric_scores = {}
+        # best_raw_data = {}
         #
-        # for candidate_solution in all_unique_solutions:
+        # best solution
         total_difficulty_score = 0
         total_media_score = 0
         total_CTML_score = 0
@@ -1199,7 +1234,7 @@ for student_profile_id in range(len(profile_database)):
 
         rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
 
-        print("Rubric average is:", rubric_scores["Rubric Average"])
+        #print("Rubric average is:", rubric_scores["Rubric Average"])
 
         # if (rubric_scores["Rubric Average"]) >= best_score:
         #     best_score = rubric_scores["Rubric Average"]
