@@ -11,10 +11,12 @@ import pygad
 import torch
 import math
 import random
+from pulp import *
+import time
 
 knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
-learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learner_Profile_8_Jan_2025.xlsx"
+learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learner_Profile_26_Feb_2025.xlsx"
 learning_materials = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learning_Materials_Base_set.xlsx"
 
 # This is the section where we create the Knowledge Graph
@@ -142,7 +144,7 @@ experiment_df = pd.DataFrame()
 
 for student_profile_id in range(len(profile_database)):
 
-    #student_profile_id = 0
+    #student_profile_id = 8
     print("Student profile is: ", student_profile_id )
 
     goal_nodes = profile_database['goals'][student_profile_id]
@@ -461,6 +463,139 @@ for student_profile_id in range(len(profile_database)):
             print("Initial population is complete")
             return population
 
+        def solve_set_cover_ilp(KS_names, LM_KNs_Covered, lm_time_taken, Rubric_max_time):
+            """Solves set cover using Integer Linear Programming."""
+
+            num_lms = len(LM_KNs_Covered)
+            num_ks = len(KS_names)
+
+            # Create the problem
+            prob = LpProblem("SetCover", LpMinimize)
+
+            # Decision variables (1 if LM is selected, 0 otherwise)
+            x = [LpVariable(f"x_{i}", 0, 1, LpInteger) for i in range(num_lms)]
+
+            # Objective function (minimize the number of selected LMs)
+            prob += lpSum(x)
+
+            # Constraint: Each KN must be covered
+            for j in range(num_ks):
+                covered_by = []
+                for i in range(num_lms):
+                    if KS_names[j] in LM_KNs_Covered[i]:
+                        covered_by.append(x[i])
+                prob += lpSum(covered_by) >= 1
+
+            # Constraint: total time must be less than or equal to the Rubric Max Time.
+            prob += lpSum([x[i] * lm_time_taken[i] for i in range(num_lms)]) <= Rubric_max_time
+
+            # Solve the problem
+            prob.solve()
+
+            # Extract the solution
+            if prob.status == LpStatusOptimal:
+                selected_lms = [i for i in range(num_lms) if value(x[i]) == 1]
+                return "There is a solution to the set cover problem"
+            else:
+                return "No solution to set cover problem"  # No solution found
+
+
+        def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
+                                              Rubric_min_time, Rubric_max_time, max_failed_attempts=1000000):
+            population = np.zeros((population_size, num_genes), dtype=int)
+            valid_count = 0
+            failed_attempts = 0
+
+            while valid_count < population_size:
+                if failed_attempts >= max_failed_attempts:
+                    print(
+                        f"Maximum failed attempts reached ({max_failed_attempts}). Generated {valid_count}/{population_size} valid chromosomes.")
+                    print(solve_set_cover_ilp(KS_names, LM_KNs_Covered, lm_time_taken, Rubric_max_time))
+                    return population[:valid_count]
+
+                chromosome = np.zeros(num_genes, dtype=int)
+                uncovered_kn = set(KS_names)
+
+                # Randomly choose LMs that cover KNs until set cover is achieved
+                while uncovered_kn:
+                    potential_lms = []
+                    for lm_index, covered_kn in enumerate(LM_KNs_Covered):
+                        if any(kn in covered_kn for kn in uncovered_kn) and lm_time_taken[lm_index] <= Rubric_max_time:
+                            potential_lms.append(lm_index)
+
+                    if not potential_lms:
+                        break
+
+                    lm_to_add = random.choice(potential_lms)
+                    chromosome[lm_to_add] = 1
+                    uncovered_kn -= set(LM_KNs_Covered[lm_to_add])
+
+                if uncovered_kn:
+                    failed_attempts += 1
+                    continue
+
+                total_duration = np.sum(chromosome * lm_time_taken)
+
+                if total_duration > Rubric_max_time:
+                    failed_attempts += 1
+                    continue
+
+                elif total_duration < Rubric_min_time:
+                    available_lms = [i for i, val in enumerate(chromosome) if val == 0]
+                    random.shuffle(available_lms)
+                    for lm_index in available_lms:
+                        if total_duration + lm_time_taken[lm_index] <= Rubric_max_time:
+                            chromosome[lm_index] = 1
+                            total_duration += lm_time_taken[lm_index]
+                            if Rubric_min_time <= total_duration <= Rubric_max_time:
+                                population[valid_count] = chromosome
+                                valid_count += 1
+                                failed_attempts = 0  # reset failed attempts
+                                break
+                        else:
+                            continue
+                    else:
+                        if Rubric_min_time <= total_duration <= Rubric_max_time:
+                            population[valid_count] = chromosome
+                            valid_count += 1
+                            failed_attempts = 0  # reset failed attempts
+                else:
+                    population[valid_count] = chromosome
+                    valid_count += 1
+                    #print("Found solution", valid_count, " after ", failed_attempts, "tries")
+                    failed_attempts = 0  # reset failed attempts
+
+            print("Population successfully created")
+            return population
+
+        # def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
+        #                                       Rubric_min_time, Rubric_max_time, timeout_seconds=60):
+        #     population = np.zeros((population_size, num_genes), dtype=int)
+        #     valid_count = 0
+        #     start_time = time.time()  # Record the start time
+        #
+        #     while valid_count < population_size:
+        #         if time.time() - start_time > timeout_seconds:
+        #             print(
+        #                 f"Timeout reached ({timeout_seconds} seconds). Generated {valid_count}/{population_size} valid chromosomes.")
+        #             return population[:valid_count]  # Return the valid chromosomes generated so far
+        #
+        #         chromosome = np.random.choice([0, 1], size=num_genes, p=[0.5, 0.5])
+        #
+        #         kn_coverage = {kn: False for kn in KS_names}
+        #         total_duration = np.sum(chromosome * lm_time_taken)
+        #
+        #         for i, lm_active in enumerate(chromosome):
+        #             if lm_active:
+        #                 for kn in LM_KNs_Covered[i]:
+        #                     if kn in kn_coverage:
+        #                         kn_coverage[kn] = True
+        #
+        #         if all(kn_coverage.values()) and Rubric_min_time <= total_duration <= Rubric_max_time:
+        #             population[valid_count] = chromosome
+        #             valid_count += 1
+        #     print("Population successfully created")
+        #     return population
 
         def generate_initial_population_seeds(population_size, num_genes, lm_time_taken, min_time, max_time, num_seeds, matching_scores, LM_overall_preference_score, LM_KNs_Covered, KS_names):
             population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
@@ -843,19 +978,6 @@ for student_profile_id in range(len(profile_database)):
             included_indices = np.where(solution == 1)[0]
             num_LMs = len(included_indices)
 
-
-            # Check for complete set cover - otherwise invalidate potential solution
-            kn_coverage = {kn: False for kn in KS_names}
-
-            for i, lm_active in enumerate(solution):
-                if lm_active:
-                    for kn in LM_KNs_Covered[i]:
-                        if kn in kn_coverage:
-                            kn_coverage[kn] = True
-
-            if not all(kn_coverage.values()):
-                return [0, 0]  # Not a valid set cover
-
             difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
             difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
 
@@ -867,31 +989,36 @@ for student_profile_id in range(len(profile_database)):
             media_matching_average = max(0.0, min(1.0, media_matching_average))
 
             total_duration = np.sum(solution*lm_time_taken)
-            min_time_compliance = 0.0
-            max_time_compliance = 0.0
+
+            #slightly adjust the rubric min and max times
+            adjusted_rubric_min_time = Rubric_min_time - 1
+            adjusted_rubric_max_time = Rubric_max_time + 1
+
+            if total_duration >= min_time:
+                min_time_compliance = 1.0
+            elif adjusted_rubric_min_time <= total_duration < min_time:  # Now within rubric range but below min_time
+                min_time_compliance = 1.0 - (abs(min_time - total_duration) / abs(adjusted_rubric_min_time - min_time)) if adjusted_rubric_min_time != min_time else 0.0
+            else: min_time_compliance = 0
+
+            if total_duration <= max_time:
+                max_time_compliance = 1.0
+            elif max_time < total_duration <= adjusted_rubric_max_time:  # Now within rubric range but below above max_time
+                max_time_compliance = 1.0 - abs(max_time - total_duration) / abs(adjusted_rubric_max_time - max_time) if adjusted_rubric_max_time != max_time else 0.0
+            else: max_time_compliance = 0
+
+
+            min_time_compliance = max(0.0, min(1.0, min_time_compliance))
+            max_time_compliance = max(0.0, min(1.0, max_time_compliance))
 
             # if min_time <= total_duration <= max_time:
             #     min_time_compliance = 1.0
             #     max_time_compliance = 1.0
-            # elif total_duration < min_time:  # Now within rubric range but below min_time
-            #     min_time_compliance = 1.0 - (abs(min_time - total_duration) / abs(Rubric_min_time - min_time)) if Rubric_min_time != min_time else 0.0
-            #     max_time_compliance = 1
+            # elif total_duration < min_time:
+            #     min_time_compliance = 1.0 - (abs(min_time - total_duration) / min_time)
+            #     max_time_compliance = min_time_compliance
             # elif total_duration > max_time:  # Now within rubric range but above max_time
             #     max_time_compliance = 0.25 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
-            #     min_time_compliance = 1
-
-            if min_time <= total_duration <= max_time:
-                min_time_compliance = 1.0
-                max_time_compliance = 1.0
-            elif total_duration < min_time:
-                min_time_compliance = 1.0 - (abs(min_time - total_duration) / min_time)
-                max_time_compliance = min_time_compliance
-            elif total_duration > max_time:  # Now within rubric range but above max_time
-                max_time_compliance = 0.25 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
-                min_time_compliance = max_time_compliance
-
-            min_time_compliance = max(0.0, min(1.0, min_time_compliance))
-            max_time_compliance = max(0.0, min(1.0, max_time_compliance))
+            #     min_time_compliance = max_time_compliance
 
             # Begin section which examines relationships between LMs and KNs
             total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
@@ -956,7 +1083,7 @@ for student_profile_id in range(len(profile_database)):
             elif media_matching_average >= 0.25:
                 rubric_scores["media_matching"] = 2
 
-            if min_time < total_duration < max_time:
+            if min_time <= total_duration <= max_time:
                 rubric_scores["time_interval_score"] = 4
             else:
                 if total_duration < min_time:
@@ -1006,18 +1133,33 @@ for student_profile_id in range(len(profile_database)):
                 rubric_scores["MDIP"] = 2
 
             rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
-            #time_compliance = ((max_time_compliance * 0.5 + min_time_compliance * 0.5) * 3) + 1
-            # Try reducing to three objectives to simplify problem
-            #objective 1 - LM fitness for the learner
-            normalized_score = (((difficulty_matching_average + CTML_average_normalized + media_matching_average +
-                                average_cohesiveness + normalized_segmenting + normalized_MDIP +
-                                normalized_average_coherence + normalized_average_balanced_cover + max_time_compliance + min_time_compliance) / 10)*3)+1
 
-            #time_compliance = 2 / ((0.5 / max_time_compliance) + (0.5 / min_time_compliance)) if max_time_compliance > 0 and min_time_compliance > 0 else 0
-            #if time_compliance > 0: time_compliance = (time_compliance * 3)+ 1
+            # Check for complete set cover and satisfaction of time restrictions - otherwise invalidate potential solution
+            kn_coverage = {kn: False for kn in KS_names}
 
-            return [rubric_scores["Rubric Average"], normalized_score]
+            for i, lm_active in enumerate(solution):
+                if lm_active:
+                    for kn in LM_KNs_Covered[i]:
+                        if kn in kn_coverage:
+                            kn_coverage[kn] = True
 
+            if not all(kn_coverage.values()):
+                return [-1, -1, -1, -1]  # Not a valid set cover or time constraints violated
+
+            #normalized_score = (((difficulty_matching_average + CTML_average_normalized + media_matching_average +
+            #                    average_cohesiveness + normalized_segmenting + normalized_MDIP +
+            #                    normalized_average_coherence + normalized_average_balanced_cover + max_time_compliance + min_time_compliance) / 10)*3)+1
+
+            LM_compliance_score = ((difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness) / 4) * 3 + 1
+
+            KN_compliance_score = ((normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_average_balanced_cover) / 4) * 3 + 1
+
+            time_compliance = ((min_time_compliance + max_time_compliance) * 2 ) * 3 + 1
+
+
+            #return [rubric_scores["Rubric Average"], normalized_score]
+            #return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance]
+            return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance]
 
             #return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
             #        min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
@@ -1026,8 +1168,8 @@ for student_profile_id in range(len(profile_database)):
         # We need to add the requirement of a set cover to the genetic algorithm. All KNs in KS_names need to be covered by at least 1 LM for a solution to be valid
         # This necessitates a change to the population
 
-        num_seeds = 10 # Indicates numbers of seeds to be included in population per category
-        num_generations = 50
+        num_seeds = 20 # Indicates numbers of seeds to be included in population per category
+        num_generations = 100
         num_parents_mating = 25
         sol_per_pop = 100
         num_genes = len(LM_database)
@@ -1040,8 +1182,8 @@ for student_profile_id in range(len(profile_database)):
         # Define Rubric Parameters that will be used in the GA Fitness Function
         # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
         #Rubric_max_time = math.ceil(max_time * 1.5)
-        Rubric_max_time = global_max_time
-        Rubric_min_time = math.floor(min_time * 0.5)
+        Rubric_max_time = math.ceil(max_time*1.2)
+        Rubric_min_time = math.floor(min_time * 0.8)
         Rubric_max_coherence = 1.1
         max_average_balanced_cover = 5
         Rubric_max_MDIP = 4
@@ -1061,19 +1203,20 @@ for student_profile_id in range(len(profile_database)):
                                sol_per_pop=sol_per_pop,  # Increased population size
                                num_genes=num_genes,
                                gene_space=gene_space,
+                               initial_population = generate_valid_initial_population(sol_per_pop, num_genes, KS_names, LM_KNs_Covered,lm_time_taken,Rubric_min_time,Rubric_max_time,1000000),
                                #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 1),
                                #initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
                                #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
-                               initial_population = generate_initial_population_seeds(sol_per_pop, num_genes, lm_time_taken,
-                                                                                      min_time, max_time, num_seeds, matching_scores, LM_overall_preference_score, LM_KNs_Covered, KS_names),
+                               #initial_population = generate_initial_population_seeds(sol_per_pop, num_genes, lm_time_taken,
+                                                                                      #min_time, max_time, num_seeds, matching_scores, LM_overall_preference_score, LM_KNs_Covered, KS_names),
                                fitness_func=fitness_func,
                                #parallel_processing=["process", 24],
                                #parent_selection_type='nsga2',  # Changed parent selection
                                parent_selection_type="nsga2",
                                mutation_type='random',  # Changed mutation type
-                               mutation_probability=0.5,  # Adjust mutation probability
+                               mutation_probability=0.3,  # Adjust mutation probability
                                crossover_type='two_points',  # Change crossover type
-                               crossover_probability=0.2,  # adjust crossover probability
+                               crossover_probability=0.3,  # adjust crossover probability
                                keep_elitism=2
                                #save_solutions=True
                                )
@@ -1081,6 +1224,8 @@ for student_profile_id in range(len(profile_database)):
 
         ga_instance.run()
         #ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'])
+        #ga_instance.plot_fitness(label=['Rubric Average', 'LM compliance average', "KN compliance average"])
+        #ga_instance.plot_fitness(label=['LM compliance average', "KN compliance average", "Time_interval average"])
         # filename = "student_" + str(student_profile_id) + ".png"
         #
         # experiment_dir = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/"
@@ -1138,8 +1283,8 @@ for student_profile_id in range(len(profile_database)):
         #for i, score in enumerate(matching_scores):
         #    if score != 0: print(f"LM {i+1} has a matching score of {score:.3f}")
 
-        #pareto_fronts = ga_instance.pareto_fronts
-        #print("The length of the pareto front is: ", len(pareto_fronts))
+        pareto_fronts = ga_instance.pareto_fronts
+        print("The length of the pareto front is: ", len(pareto_fronts))
         # solutions = ga_instance.population
         # #
         # all_unique_solutions = []
