@@ -16,7 +16,7 @@ import time
 
 knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
-learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learner_Profile_26_Feb_2025.xlsx"
+learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learner_Profile_8_Jan_2025.xlsx"
 learning_materials = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learning_Materials_Base_set.xlsx"
 
 # This is the section where we create the Knowledge Graph
@@ -500,8 +500,12 @@ for student_profile_id in range(len(profile_database)):
                 return "No solution to set cover problem"  # No solution found
 
 
+        import numpy as np
+        import random
+
+
         def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
-                                              Rubric_min_time, Rubric_max_time, max_failed_attempts=1000000):
+                                              Rubric_min_time, Rubric_max_time, max_failed_attempts=10000):
             population = np.zeros((population_size, num_genes), dtype=int)
             valid_count = 0
             failed_attempts = 0
@@ -509,9 +513,36 @@ for student_profile_id in range(len(profile_database)):
             while valid_count < population_size:
                 if failed_attempts >= max_failed_attempts:
                     print(
-                        f"Maximum failed attempts reached ({max_failed_attempts}). Generated {valid_count}/{population_size} valid chromosomes.")
-                    print(solve_set_cover_ilp(KS_names, LM_KNs_Covered, lm_time_taken, Rubric_max_time))
-                    return population[:valid_count]
+                        f"Maximum failed attempts reached ({max_failed_attempts}). Time constraints dropped. Generating remaining population with set cover only.")
+
+                    while valid_count < population_size:  # fill the rest of the population.
+                        chromosome = np.zeros(num_genes, dtype=int)
+                        uncovered_kn = set(KS_names)
+
+                        while uncovered_kn:
+                            potential_lms = []
+                            for lm_index, covered_kn in enumerate(LM_KNs_Covered):
+                                if any(kn in covered_kn for kn in uncovered_kn):
+                                    potential_lms.append(lm_index)
+
+                            if not potential_lms:
+                                break
+
+                            lm_to_add = random.choice(potential_lms)
+                            chromosome[lm_to_add] = 1
+                            uncovered_kn -= set(LM_KNs_Covered[lm_to_add])
+
+                        if uncovered_kn:  # if set cover failed.
+                            continue  # try again.
+
+                        # Fill remaining LMs randomly
+                        for i in range(num_genes):
+                            if chromosome[i] == 0:
+                                chromosome[i] = random.choice([0, 1])
+
+                        population[valid_count] = chromosome
+                        valid_count += 1
+                    break  # stop the outer loop.
 
                 chromosome = np.zeros(num_genes, dtype=int)
                 uncovered_kn = set(KS_names)
@@ -550,7 +581,7 @@ for student_profile_id in range(len(profile_database)):
                             if Rubric_min_time <= total_duration <= Rubric_max_time:
                                 population[valid_count] = chromosome
                                 valid_count += 1
-                                failed_attempts = 0  # reset failed attempts
+                                failed_attempts = 0
                                 break
                         else:
                             continue
@@ -558,15 +589,83 @@ for student_profile_id in range(len(profile_database)):
                         if Rubric_min_time <= total_duration <= Rubric_max_time:
                             population[valid_count] = chromosome
                             valid_count += 1
-                            failed_attempts = 0  # reset failed attempts
+                            failed_attempts = 0
                 else:
                     population[valid_count] = chromosome
                     valid_count += 1
-                    #print("Found solution", valid_count, " after ", failed_attempts, "tries")
-                    failed_attempts = 0  # reset failed attempts
+                    failed_attempts = 0
 
             print("Population successfully created")
             return population
+
+
+        # def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
+        #                                       Rubric_min_time, Rubric_max_time, max_failed_attempts=10000):
+        #     population = np.zeros((population_size, num_genes), dtype=int)
+        #     valid_count = 0
+        #     failed_attempts = 0
+        #
+        #     while valid_count < population_size:
+        #         if failed_attempts >= max_failed_attempts:
+        #             print(
+        #                 f"Maximum failed attempts reached ({max_failed_attempts}). Generated {valid_count}/{population_size} valid chromosomes.")
+        #             print(solve_set_cover_ilp(KS_names, LM_KNs_Covered, lm_time_taken, Rubric_max_time))
+        #             return population[:valid_count]
+        #
+        #         chromosome = np.zeros(num_genes, dtype=int)
+        #         uncovered_kn = set(KS_names)
+        #
+        #         # Randomly choose LMs that cover KNs until set cover is achieved
+        #         while uncovered_kn:
+        #             potential_lms = []
+        #             for lm_index, covered_kn in enumerate(LM_KNs_Covered):
+        #                 if any(kn in covered_kn for kn in uncovered_kn) and lm_time_taken[lm_index] <= Rubric_max_time:
+        #                     potential_lms.append(lm_index)
+        #
+        #             if not potential_lms:
+        #                 break
+        #
+        #             lm_to_add = random.choice(potential_lms)
+        #             chromosome[lm_to_add] = 1
+        #             uncovered_kn -= set(LM_KNs_Covered[lm_to_add])
+        #
+        #         if uncovered_kn:
+        #             failed_attempts += 1
+        #             continue
+        #
+        #         total_duration = np.sum(chromosome * lm_time_taken)
+        #
+        #         if total_duration > Rubric_max_time:
+        #             failed_attempts += 1
+        #             continue
+        #
+        #         elif total_duration < Rubric_min_time:
+        #             available_lms = [i for i, val in enumerate(chromosome) if val == 0]
+        #             random.shuffle(available_lms)
+        #             for lm_index in available_lms:
+        #                 if total_duration + lm_time_taken[lm_index] <= Rubric_max_time:
+        #                     chromosome[lm_index] = 1
+        #                     total_duration += lm_time_taken[lm_index]
+        #                     if Rubric_min_time <= total_duration <= Rubric_max_time:
+        #                         population[valid_count] = chromosome
+        #                         valid_count += 1
+        #                         failed_attempts = 0  # reset failed attempts
+        #                         break
+        #                 else:
+        #                     continue
+        #             else:
+        #                 if Rubric_min_time <= total_duration <= Rubric_max_time:
+        #                     population[valid_count] = chromosome
+        #                     valid_count += 1
+        #                     failed_attempts = 0  # reset failed attempts
+        #         else:
+        #             population[valid_count] = chromosome
+        #             valid_count += 1
+        #             #print("Found solution", valid_count, " after ", failed_attempts, "tries")
+        #             failed_attempts = 0  # reset failed attempts
+        #
+        #     print("Population successfully created")
+        #     return population
 
         # def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
         #                                       Rubric_min_time, Rubric_max_time, timeout_seconds=60):
@@ -1154,7 +1253,7 @@ for student_profile_id in range(len(profile_database)):
 
             KN_compliance_score = ((normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_average_balanced_cover) / 4) * 3 + 1
 
-            time_compliance = ((min_time_compliance + max_time_compliance) * 2 ) * 3 + 1
+            time_compliance = ((min_time_compliance + max_time_compliance) / 2 ) * 3 + 1
 
 
             #return [rubric_scores["Rubric Average"], normalized_score]
@@ -1169,9 +1268,9 @@ for student_profile_id in range(len(profile_database)):
         # This necessitates a change to the population
 
         num_seeds = 20 # Indicates numbers of seeds to be included in population per category
-        num_generations = 100
+        num_generations = 50
         num_parents_mating = 25
-        sol_per_pop = 100
+        sol_per_pop = 50
         num_genes = len(LM_database)
         #At 0.5 incusion_probability is strong for high time-frame students.
         inclusion_probability = 0.5
@@ -1203,7 +1302,7 @@ for student_profile_id in range(len(profile_database)):
                                sol_per_pop=sol_per_pop,  # Increased population size
                                num_genes=num_genes,
                                gene_space=gene_space,
-                               initial_population = generate_valid_initial_population(sol_per_pop, num_genes, KS_names, LM_KNs_Covered,lm_time_taken,Rubric_min_time,Rubric_max_time,1000000),
+                               initial_population = generate_valid_initial_population(sol_per_pop, num_genes, KS_names, LM_KNs_Covered,lm_time_taken,Rubric_min_time,Rubric_max_time,10000),
                                #initial_population = generate_initial_population_sliding_probability(sol_per_pop, num_genes, KS_names, LM_KNs_Covered, 1),
                                #initial_population=generate_initial_population_weighted(sol_per_pop, num_genes, inclusion_probability_non_KS, inclusion_probability_KS, KS_names, LM_KNs_Covered),
                                #initial_population=generate_initial_population(sol_per_pop, num_genes, inclusion_probability),
@@ -1283,8 +1382,27 @@ for student_profile_id in range(len(profile_database)):
         #for i, score in enumerate(matching_scores):
         #    if score != 0: print(f"LM {i+1} has a matching score of {score:.3f}")
 
-        pareto_fronts = ga_instance.pareto_fronts
-        print("The length of the pareto front is: ", len(pareto_fronts))
+
+        # Start with fixing this code tomorrow:
+        
+        # Check pareto front for best solution according to rubric
+        pareto_front = ga_instance.pareto_fronts
+        #print("The length of the pareto front is: ", len(pareto_fronts))
+
+        best_chromosome_index = pareto_front[0][0]
+        highest_fitness_value = pareto_front[0][1][0]  # Access the first element of the fitness array
+
+        for row in pareto_front[1:]:  # Iterate from the second row onwards
+            chromosome_index = row[0]
+            fitness_values = row[1]
+            first_fitness_value = fitness_values[0]
+
+            if first_fitness_value > highest_fitness_value:
+                highest_fitness_value = first_fitness_value
+                best_chromosome_index = chromosome_index
+
+        solution = ga_instance.population[best_chromosome_index]
+        solution = np.round(solution).astype(int)  # Round and cast to int
         # solutions = ga_instance.population
         # #
         # all_unique_solutions = []
