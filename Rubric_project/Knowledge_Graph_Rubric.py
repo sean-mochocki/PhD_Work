@@ -506,11 +506,15 @@ for student_profile_id in range(len(profile_database)):
 
         def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
                                               Rubric_min_time, Rubric_max_time, max_failed_attempts=10000):
+
+            #Split population in half - half will be created to be a set cover and satisfy time constraints, half will be random
+            valid_population_size = population_size // 2
+
             population = np.zeros((population_size, num_genes), dtype=int)
             valid_count = 0
             failed_attempts = 0
 
-            while valid_count < population_size:
+            while valid_count < valid_population_size:
                 if failed_attempts >= max_failed_attempts:
                     print(
                         f"Maximum failed attempts reached ({max_failed_attempts}). Time constraints dropped. Generating remaining population with set cover only.")
@@ -595,6 +599,14 @@ for student_profile_id in range(len(profile_database)):
                     valid_count += 1
                     failed_attempts = 0
 
+            # Randomly create the remaining chromosomes
+            random_count = 0
+            while random_count < population_size - valid_population_size:
+                chromosome = np.random.choice([0, 1], size=num_genes)
+                population[valid_population_size + random_count] = chromosome
+                random_count += 1
+
+            #print(len(population))
             print("Population successfully created")
             return population
 
@@ -1105,6 +1117,8 @@ for student_profile_id in range(len(profile_database)):
                 max_time_compliance = 1.0 - abs(max_time - total_duration) / abs(adjusted_rubric_max_time - max_time) if adjusted_rubric_max_time != max_time else 0.0
             else: max_time_compliance = 0
 
+            if min_time_compliance < 1.0: max_time_compliance = min_time_compliance
+            elif max_time_compliance < 1.0: min_time_compliance = max_time_compliance
 
             min_time_compliance = max(0.0, min(1.0, min_time_compliance))
             max_time_compliance = max(0.0, min(1.0, max_time_compliance))
@@ -1233,7 +1247,8 @@ for student_profile_id in range(len(profile_database)):
 
             rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
 
-            # Check for complete set cover and satisfaction of time restrictions - otherwise invalidate potential solution
+            # Check for complete set cover and satisfaction of time restrictions - otherwise put set_cover to 1
+            set_cover = 4
             kn_coverage = {kn: False for kn in KS_names}
 
             for i, lm_active in enumerate(solution):
@@ -1243,7 +1258,7 @@ for student_profile_id in range(len(profile_database)):
                             kn_coverage[kn] = True
 
             if not all(kn_coverage.values()):
-                return [-1, -1, -1, -1]  # Not a valid set cover or time constraints violated
+                set_cover = 1 # Not a valid set cover or time constraints violated
 
             #normalized_score = (((difficulty_matching_average + CTML_average_normalized + media_matching_average +
             #                    average_cohesiveness + normalized_segmenting + normalized_MDIP +
@@ -1258,7 +1273,7 @@ for student_profile_id in range(len(profile_database)):
 
             #return [rubric_scores["Rubric Average"], normalized_score]
             #return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance]
-            return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance]
+            return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance, set_cover]
 
             #return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
             #        min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
@@ -1268,9 +1283,9 @@ for student_profile_id in range(len(profile_database)):
         # This necessitates a change to the population
 
         num_seeds = 20 # Indicates numbers of seeds to be included in population per category
-        num_generations = 50
+        num_generations = 100
         num_parents_mating = 25
-        sol_per_pop = 50
+        sol_per_pop = 100
         num_genes = len(LM_database)
         #At 0.5 incusion_probability is strong for high time-frame students.
         inclusion_probability = 0.5
@@ -1316,14 +1331,14 @@ for student_profile_id in range(len(profile_database)):
                                mutation_probability=0.3,  # Adjust mutation probability
                                crossover_type='two_points',  # Change crossover type
                                crossover_probability=0.3,  # adjust crossover probability
-                               keep_elitism=2
+                               #keep_elitism=2
                                #save_solutions=True
                                )
 
 
         ga_instance.run()
         #ga_instance.plot_fitness(label = ['Rubric Average', 'Normalized Average'])
-        #ga_instance.plot_fitness(label=['Rubric Average', 'LM compliance average', "KN compliance average"])
+        ga_instance.plot_fitness(label=['Rubric Average', 'LM compliance average', "KN compliance average", "Time Interval Compliance", "Set Cover"])
         #ga_instance.plot_fitness(label=['LM compliance average', "KN compliance average", "Time_interval average"])
         # filename = "student_" + str(student_profile_id) + ".png"
         #
@@ -1346,7 +1361,7 @@ for student_profile_id in range(len(profile_database)):
 
         solution = np.round(solution).astype(int)  # Round and cast to int
         #print(solution)
-        #print(f"Fitness of best solution: {solution_fitness}")  # Print the fitness value
+        print(f"Fitness of best solution: {solution_fitness}")  # Print the fitness value
         num_LMs = np.sum(solution)
         #print("The number of LMs is:", num_LMs)
 
@@ -1384,22 +1399,23 @@ for student_profile_id in range(len(profile_database)):
 
 
         # Start with fixing this code tomorrow:
-        
+
         # Check pareto front for best solution according to rubric
         pareto_front = ga_instance.pareto_fronts
         #print("The length of the pareto front is: ", len(pareto_fronts))
 
-        best_chromosome_index = pareto_front[0][0]
-        highest_fitness_value = pareto_front[0][1][0]  # Access the first element of the fitness array
+        highest_fitness_value = -1  # Access the first element of the fitness array
+        best_chromosome_index = -1
 
-        for row in pareto_front[1:]:  # Iterate from the second row onwards
+        for row in pareto_front[0]:  # Iterate from the second row onwards
             chromosome_index = row[0]
-            fitness_values = row[1]
-            first_fitness_value = fitness_values[0]
+            fitness_value = row[1][0]
 
-            if first_fitness_value > highest_fitness_value:
-                highest_fitness_value = first_fitness_value
+            if fitness_value > highest_fitness_value:
+                highest_fitness_value = fitness_value
                 best_chromosome_index = chromosome_index
+
+        print("Fitness value of best solution from pareto front is:", highest_fitness_value)
 
         solution = ga_instance.population[best_chromosome_index]
         solution = np.round(solution).astype(int)  # Round and cast to int
