@@ -1185,7 +1185,7 @@ for student_profile_id in range(len(profile_database)):
 
         gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
-
+        # Initial Exhaustive Search
         # sol_per_pop = [50, 100]
         # num_generations = [50, 100]
         # parent_selection_type = ["nsga2", "tournament_nsga2"]
@@ -1195,14 +1195,24 @@ for student_profile_id in range(len(profile_database)):
         # crossover_probability = [0.1, 0.3, 0.5]
         # num_parents_mating = [10, 25]
 
+        # Second Exhaustive Search for specialized Initial Population
+        # sol_per_pop = [50, 100, 150, 200, 250]
+        # num_generations = [50, 100, 150, 200, 250]
+        # parent_selection_type = ["nsga2"]
+        # mutation_type = ["swap"]
+        # crossover_type = ["single_point"]
+        # mutation_probability = [0.1, 0.3, 0.5]
+        # crossover_probability = [0.5]
+        # num_parents_mating = [10]
+
         sol_per_pop = [50, 100, 150, 200, 250]
         num_generations = [50, 100, 150, 200, 250]
         parent_selection_type = ["nsga2"]
         mutation_type = ["swap"]
-        crossover_type = ["single_point"]
+        crossover_type = ["two_points"]
         mutation_probability = [0.1, 0.3, 0.5]
-        crossover_probability = [0.5]
-        num_parents_mating = [10]
+        crossover_probability = [0.3]
+        num_parents_mating = [25]
 
         parameter_combinations = list(itertools.product(
             sol_per_pop,
@@ -1257,11 +1267,11 @@ for student_profile_id in range(len(profile_database)):
                                    sol_per_pop=pop_size,
                                    num_genes=num_genes,
                                    gene_space=gene_space,
-                                   #initial_population = generate_initial_population(pop_size, num_genes, 0.5),
-                                   initial_population=generate_valid_initial_population(pop_size, num_genes,
-                                                                                        KS_names, LM_KNs_Covered,
-                                                                                        lm_time_taken, Rubric_min_time,
-                                                                                        Rubric_max_time, 1000),
+                                   initial_population = generate_initial_population(pop_size, num_genes, 0.5),
+                                   # initial_population=generate_valid_initial_population(pop_size, num_genes,
+                                   #                                                      KS_names, LM_KNs_Covered,
+                                   #                                                      lm_time_taken, Rubric_min_time,
+                                   #                                                      Rubric_max_time, 1000),
                                    fitness_func=fitness_func,
                                    parent_selection_type=parent_type,
                                    mutation_type=mut_type,
