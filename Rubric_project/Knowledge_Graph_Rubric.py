@@ -1205,6 +1205,7 @@ for student_profile_id in range(len(profile_database)):
         # crossover_probability = [0.5]
         # num_parents_mating = [10]
 
+        # Second Exhaustive Search for random initial population
         sol_per_pop = [50, 100, 150, 200, 250]
         num_generations = [50, 100, 150, 200, 250]
         parent_selection_type = ["nsga2"]
