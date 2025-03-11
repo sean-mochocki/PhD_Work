@@ -164,26 +164,32 @@ for student_id in solution_database["Student_id"]:
 
     def generate_prerequisite_sorted_permutation(n, prerequisite_table):
         remaining_lms = list(range(n))
-        sorted_sequence = []
+        sorted_positions = [0] * n
+        position = 0
 
         while remaining_lms:
             no_prerequisites = []
             for lm in remaining_lms:
                 is_no_prerequisite = True
                 for other_lm in remaining_lms:
-                    if prerequisite_table[lm][other_lm] != 0:
-                        is_no_prerequisite = False
-                        break
+                    if lm != other_lm:
+                        if prerequisite_table[lm][other_lm] != 0:
+                            is_no_prerequisite = False
+                            break
                 if is_no_prerequisite:
                     no_prerequisites.append(lm)
 
             if not no_prerequisites:
+                print(position)
                 raise ValueError("Cycle detected in prerequisite table. Cannot create valid sequence.")
 
-            sorted_sequence.extend(no_prerequisites)
-            remaining_lms = [lm for lm in remaining_lms if lm not in no_prerequisites]
+            for lm in no_prerequisites:
+                sorted_positions[lm] = position
+                position += 1
+                remaining_lms.remove(lm)
 
-        return sorted_sequence
+
+        return sorted_positions
 
     #lm_sequence_indices = generate_random_permutation(n)
 
