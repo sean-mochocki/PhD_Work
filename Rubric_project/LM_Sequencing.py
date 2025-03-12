@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import re
 import random
+import copy
+import math
 from deap import base, creator, tools
 import ast
 import time
@@ -191,14 +193,72 @@ for student_id in solution_database["Student_id"]:
 
         return sorted_positions
 
-    #lm_sequence_indices = generate_random_permutation(n)
+    def fitness_function (solution):
+        difficulty_score = 0
+        prerequisite_score = 0
+        interleaving_score = 0
 
+        for i in range(len(solution)):
+            for j in range(len(solution)):
+                if i != j:
+                    if solution[i] < solution[j]:
+                        difficulty_score += difficulty_table[i][j]
+                        prerequisite_score += prerequisite_table[i][j]
+
+        for i in range(len(solution) - 1):
+            for j in range(i + 1, len(solution)):
+                if abs(solution[i] - solution[j]) == 1:
+                    interleaving_score += interleaving_table[i][j]
+
+        combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
+
+        return combined_score
+
+
+    def hill_climber(solution, fitness_function):
+        """
+        Basic hill-climbing algorithm.
+
+        Args:
+            solution: The initial solution (a list).
+            fitness_function: A function that evaluates the fitness of a solution.
+
+        Returns:
+            The best solution found.
+        """
+
+        best_fitness = fitness_function(solution)
+        best_solution = copy.deepcopy(solution)  # Create a deep copy
+        current_solution = copy.deepcopy(solution)
+
+        improved = True  # add a variable to track if an improvement has been found.
+
+        while improved:
+            improved = False  # reset the improved variable.
+            for i in range(len(current_solution)):
+                for j in range(len(current_solution)):
+                    if i != j:
+                        neighbor_solution = copy.deepcopy(current_solution)  # create a copy of the current solution
+                        # swap the values
+                        neighbor_solution[i], neighbor_solution[j] = neighbor_solution[j], neighbor_solution[i]
+                        neighbor_fitness = fitness_function(neighbor_solution)
+
+                        if neighbor_fitness < best_fitness:
+                            best_fitness = neighbor_fitness
+                            best_solution = neighbor_solution
+                            current_solution = neighbor_solution  # update the current solution
+                            improved = True  # set improved to true.
+            if not improved:  # if no improvement was found, exit the while loop.
+                break
+
+        return best_solution
 
     # Create sorted difficulty score
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
-    lm_sequence_indices = generate_prerequisite_sorted_permutation(n, prerequisite_table)
+    weights = [0.4, 0.4, 0.3]
 
-    # Calculate Difficulty Score
+    lm_sequence_indices = generate_random_permutation(n)
+
     difficulty_score = 0
     prerequisite_score = 0
     interleaving_score = 0
@@ -215,10 +275,40 @@ for student_id in solution_database["Student_id"]:
             if abs(lm_sequence_indices[i] - lm_sequence_indices[j]) == 1:
                 interleaving_score += interleaving_table[i][j]
 
-    print("permutation is", lm_sequence_indices)
-    print("difficulty score is ", difficulty_score)
-    print("prerequisite score is ", prerequisite_score)
-    print("interleaving score is ", interleaving_score)
+    combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
+    print("difficulty", difficulty_score)
+    print("prerequisite", prerequisite_score)
+    print("interleaving", interleaving_score)
+    print("combined", combined_score)
+
+    lm_sequence_indices = hill_climber(lm_sequence_indices, fitness_function)
+
+    #lm_sequence_indices = generate_prerequisite_sorted_permutation(n, prerequisite_table)
+
+    difficulty_score = 0
+    prerequisite_score = 0
+    interleaving_score = 0
+
+    for i in range(len(lm_sequence_indices)):
+        for j in range(len(lm_sequence_indices)):
+            if i != j:
+                if lm_sequence_indices[i] < lm_sequence_indices[j]:
+                    difficulty_score += difficulty_table[i][j]
+                    prerequisite_score += prerequisite_table[i][j]
+
+    for i in range(len(lm_sequence_indices) - 1):
+        for j in range(i + 1, len(lm_sequence_indices)):
+            if abs(lm_sequence_indices[i] - lm_sequence_indices[j]) == 1:
+                interleaving_score += interleaving_table[i][j]
+
+    combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
+    print("difficulty", difficulty_score)
+    print("prerequisite", prerequisite_score)
+    print("interleaving", interleaving_score)
+    print("combined", combined_score)
+
+
+
 
 
 
