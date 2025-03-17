@@ -222,7 +222,24 @@ for student_id in solution_database["Student_id"]:
             if abs(solution_np[i] - solution_np[j]) == 1:
                 interleaving_score += interleaving_table[i][j]
 
-        combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
+        if difficulty_max > 0:
+            difficulty_raw_score = (difficulty_score / difficulty_max)
+        else:
+            difficulty_raw_score = 0.0
+
+        if prerequisite_max > 0:
+            prerequisite_raw_score = prerequisite_score / prerequisite_max
+        else:
+            prerequisite_raw_score = 0.0
+
+        if interleaving_max > 0:
+            interleaving_raw_score = (interleaving_score / interleaving_max)
+        else:
+            interleaving_raw_score = 0.0
+
+        # Define fitness function using raw scores for prerequisite, interleaving and difficulty sequencing.
+
+        combined_score = difficulty_raw_score * weights[0] + prerequisite_raw_score * weights[1] + interleaving_raw_score * weights[2]
 
         return combined_score
 
@@ -398,7 +415,51 @@ for student_id in solution_database["Student_id"]:
 
         return solution
 
-    def random_search(solution, fitness_function, max_iterations=500):
+
+    def simulated_annealing(solution, fitness_function, initial_temperature=100, cooling_rate=0.99,
+                            max_iterations=1000):
+        """
+        Simulated annealing algorithm.
+
+        Args:
+            solution: The initial solution (a list).
+            fitness_function: A function that evaluates the fitness of a solution.
+            initial_temperature: The initial temperature.
+            cooling_rate: The cooling rate (0 < cooling_rate < 1).
+            max_iterations: The maximum number of iterations.
+
+        Returns:
+            The best solution found.
+        """
+
+        best_fitness = fitness_function(solution)
+        best_solution = copy.deepcopy(solution)
+        current_solution = copy.deepcopy(solution)
+        temperature = initial_temperature
+
+        for _ in range(max_iterations):
+            i, j = random.sample(range(len(current_solution)), 2)  # Randomly select two distinct indices
+
+            neighbor_solution = copy.deepcopy(current_solution)
+            neighbor_solution[i], neighbor_solution[j] = neighbor_solution[j], neighbor_solution[i]
+            neighbor_fitness = fitness_function(neighbor_solution)
+
+            delta_fitness = neighbor_fitness - best_fitness  # calculate the change in fitness
+
+            if delta_fitness < 0:  # better solution
+                best_fitness = neighbor_fitness
+                best_solution = neighbor_solution
+                current_solution = neighbor_solution
+            else:  # worse solution
+                acceptance_probability = math.exp(-delta_fitness / temperature)
+                if random.random() < acceptance_probability:
+                    current_solution = neighbor_solution
+
+            temperature *= cooling_rate  # cool down
+
+        return best_solution
+
+    def random_search(solution, fitness_function, max_iterations=1000):
         """
         Random search algorithm.
 
@@ -462,7 +523,7 @@ for student_id in solution_database["Student_id"]:
 
     # Create sorted difficulty score
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
-    weights = [0.4, 0.4, 0.3]
+    weights = [0.3333, 0.3333, 0.3334]
 
     # Create random initial solution
     #lm_sequence_indices = generate_random_permutation(n)
@@ -479,9 +540,10 @@ for student_id in solution_database["Student_id"]:
 
     start_time = time.time()
     #lm_sequence_indices = hill_climber(lm_sequence_indices, fitness_function)
-    #lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
-    lm_sequence_indices = generate_random_permutation(n)
-    lm_sequence_indices = random_search(lm_sequence_indices, fitness_function)
+    lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
+    #lm_sequence_indices = generate_random_permutation(n)
+    #lm_sequence_indices = random_search(lm_sequence_indices, fitness_function)
+    #lm_sequence_indices = simulated_annealing(lm_sequence_indices, fitness_function, 100, 0.99, 1000)
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
     end_time = time.time()
 
@@ -495,7 +557,7 @@ for student_id in solution_database["Student_id"]:
     else: difficulty_raw_score = 0.0
 
     if prerequisite_max > 0: prerequisite_raw_score = prerequisite_score / prerequisite_max
-    else: prerequisite_max = 0.0
+    else: prerequisite_raw_score = 0.0
 
     if interleaving_max > 0:
         interleaving_raw_score = (interleaving_score / interleaving_max)
@@ -550,6 +612,7 @@ for student_id in solution_database["Student_id"]:
         "Sequence": str(lm_sequence_indices),
         "Difficulty": difficulty_score,
         "Difficulty Max": difficulty_max,
+        "Difficulty Raw Score": difficulty_raw_score,
         "Prerequisite": prerequisite_score,
         "Prerequisite Max": prerequisite_max,
         "Interleaving": interleaving_score,
