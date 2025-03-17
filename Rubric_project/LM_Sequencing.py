@@ -4,6 +4,7 @@ import numpy as np
 import re
 import random
 import copy
+import itertools
 import math
 from deap import base, creator, tools
 import ast
@@ -37,6 +38,8 @@ LM_database['KNs Covered'] = LM_database['KNs Covered'].str.split(', ')
 solution_database = pd.read_csv(LM_selection_solutions)
 solution_database['Personalized Learning Path'] = solution_database['Personalized Learning Path'].apply(lambda x: np.array([int(i) for i in re.sub(r'[\[\]]', '', x).split()]))
 #print(solution_database['Personalized Learning Path'])
+
+experiment_df = pd.DataFrame()
 
 #Solve problem for each student
 for student_id in solution_database["Student_id"]:
@@ -118,16 +121,17 @@ for student_id in solution_database["Student_id"]:
             for kn_i in lm_i_kn_list:
                 if kn_i in lm_j_kn_list and i != j: interleaving_table[i, j] += 1 #Increment penalty, they cover the same KN
 
-    print("Completed tables")
+    #print("Completed tables")
 
     for kn_list in LM_KNs_Covered:
         if len(kn_list) > 1:
             many_to_many = True
             break
+
     if many_to_many: print("many-to-many")
     else: print("many-to-one")
-
-    many_to_many = True
+    #many_to_many = True
+    #many_to_many = True
 
 
     def generate_random_permutation(n):
@@ -193,26 +197,55 @@ for student_id in solution_database["Student_id"]:
 
         return sorted_positions
 
-    def fitness_function (solution):
+
+    def fitness_function(solution):
+        """Optimized fitness function."""
+
+        solution_np = np.array(solution)
+        n = len(solution)
+
+        # Precompute difficulty and prerequisite scores
         difficulty_score = 0
         prerequisite_score = 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                if solution[i] < solution[j]:
+                    difficulty_score += difficulty_table[i][j]
+                    prerequisite_score += prerequisite_table[i][j]
+                else:
+                    difficulty_score += difficulty_table[j][i]
+                    prerequisite_score += prerequisite_table[j][i]
+
+        # Precompute interleaving scores
         interleaving_score = 0
-
-        for i in range(len(solution)):
-            for j in range(len(solution)):
-                if i != j:
-                    if solution[i] < solution[j]:
-                        difficulty_score += difficulty_table[i][j]
-                        prerequisite_score += prerequisite_table[i][j]
-
-        for i in range(len(solution) - 1):
-            for j in range(i + 1, len(solution)):
-                if abs(solution[i] - solution[j]) == 1:
-                    interleaving_score += interleaving_table[i][j]
+        for i, j in itertools.combinations(range(n), 2):
+            if abs(solution_np[i] - solution_np[j]) == 1:
+                interleaving_score += interleaving_table[i][j]
 
         combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
 
         return combined_score
+
+    # def fitness_function (solution):
+    #     difficulty_score = 0
+    #     prerequisite_score = 0
+    #     interleaving_score = 0
+    #
+    #     for i in range(len(solution)):
+    #         for j in range(len(solution)):
+    #             if i != j:
+    #                 if solution[i] < solution[j]:
+    #                     difficulty_score += difficulty_table[i][j]
+    #                     prerequisite_score += prerequisite_table[i][j]
+    #
+    #     for i in range(len(solution) - 1):
+    #         for j in range(i + 1, len(solution)):
+    #             if abs(solution[i] - solution[j]) == 1:
+    #                 interleaving_score += interleaving_table[i][j]
+    #
+    #     combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
+    #
+    #     return combined_score
 
 
     def hill_climber(solution, fitness_function):
@@ -253,59 +286,219 @@ for student_id in solution_database["Student_id"]:
 
         return best_solution
 
+    def calculate_combined_cost(lm_index, remaining_lms_excluding_current):
+        """Calculates the combined cost of placing lm_index before other LMs."""
+        total_cost = 0
+        for other_lm in remaining_lms_excluding_current:
+            total_cost += difficulty_table[lm_index][other_lm] + prerequisite_table[lm_index][other_lm]
+        return total_cost
+
+    def sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table):
+        """
+        Sorts Learning Materials (LMs) based on combined prerequisite and difficulty costs.
+
+        Args:
+            remaining_lms: A list of LM indices to be sorted.
+            difficulty_table: A 2D NumPy array representing difficulty costs.
+            prerequisite_table: A 2D NumPy array representing prerequisite costs.
+
+        Returns:
+            A list of LM indices sorted according to combined costs.
+        """
+
+        sorted_lms = []
+        remaining_lms_copy = remaining_lms[:]  # Create a copy to avoid modifying the original list.
+
+        while remaining_lms_copy:
+            costs = []
+            for lm in remaining_lms_copy:
+                other_lms = [other for other in remaining_lms_copy if other != lm]
+                costs.append((calculate_combined_cost(lm, other_lms), lm))
+
+            costs.sort()  # Sort by combined cost (ascending)
+            best_lm = costs[0][1]  # get the lm with the lowest cost.
+            sorted_lms.append(best_lm)
+            remaining_lms_copy.remove(best_lm)
+
+        return sorted_lms
+
+
+    def greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table):
+        """
+        Greedy algorithm to sequence LMs based on combined prerequisite and difficulty costs.
+
+        Args:
+            n: The number of LMs.
+            difficulty_table: A 2D NumPy array representing difficulty costs.
+            prerequisite_table: A 2D NumPy array representing prerequisite costs.
+
+        Returns:
+            A list representing the greedy sequence of LM indices.
+        """
+
+        solution = []
+        remaining_lms = list(range(n))
+
+        while remaining_lms:
+            sorted_lms = sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table)
+            best_lm = sorted_lms[0]  # Get the LM with the lowest cost (first element)
+            solution.append(best_lm)
+            remaining_lms.remove(best_lm)
+
+        return solution
+
+    def random_search(solution, fitness_function, max_iterations=500):
+        """
+        Random search algorithm.
+
+        Args:
+            solution: The initial solution (a list).
+            fitness_function: A function that evaluates the fitness of a solution.
+            max_iterations: The maximum number of iterations.
+
+        Returns:
+            The best solution found.
+        """
+
+        best_fitness = fitness_function(solution)
+        best_solution = copy.deepcopy(solution)
+        current_solution = copy.deepcopy(solution)
+
+        iterations_without_improvement = 0
+
+        for _ in range(max_iterations):
+            i, j = random.sample(range(len(current_solution)), 2)  # Randomly select two distinct indices
+
+            neighbor_solution = copy.deepcopy(current_solution)
+            neighbor_solution[i], neighbor_solution[j] = neighbor_solution[j], neighbor_solution[i]
+            neighbor_fitness = fitness_function(neighbor_solution)
+
+            if neighbor_fitness < best_fitness:  # changed to less than.
+                best_fitness = neighbor_fitness
+                best_solution = neighbor_solution
+                current_solution = neighbor_solution
+                iterations_without_improvement = 0  # Reset counter
+            else:
+                iterations_without_improvement += 1
+
+            if iterations_without_improvement >= max_iterations:
+                break
+
+        return best_solution
+
+    def report_fitness_metrics(solution):
+        difficulty_score = 0
+        prerequisite_score = 0
+        interleaving_score = 0
+
+        for i in range(len(solution)):
+            for j in range(i + 1, len(solution)):
+                if solution[i] < solution[j]:
+                    difficulty_score += difficulty_table[i][j]
+                    prerequisite_score += prerequisite_table[i][j]
+                else:
+                    difficulty_score += difficulty_table[j][i]
+                    prerequisite_score += prerequisite_table[j][i]
+
+        for i in range(len(solution) - 1):
+            for j in range(i + 1, len(solution)):
+                if abs(solution[i] - solution[j]) == 1:
+                    interleaving_score += interleaving_table[i][j]
+
+        combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
+        return difficulty_score, prerequisite_score, interleaving_score, combined_score
+
+
+
+
+    def greedy_prerequisite_sequencing_tie_breaker(n, difficulty_table, prerequisite_table):
+        """
+        Greedy algorithm with tie-breaker to sequence LMs based on combined costs.
+        """
+
+        solution = []
+        remaining_lms = list(range(n))
+
+        while remaining_lms:
+            costs = sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table)
+            best_lm = costs[0][1]
+            tie_lms = [lm for cost, lm in costs if cost == costs[0][0]]
+
+            if len(tie_lms) > 1:  # Tie detected
+                tie_breaker_scores = {}
+                for tied_lm in tie_lms:
+                    temp_remaining = remaining_lms[:]
+                    temp_remaining.remove(tied_lm)
+                    next_costs = sort_lms_by_combined_cost(temp_remaining, difficulty_table, prerequisite_table)
+                    if next_costs:
+                        temp_remaining_excluding_current = [lm for lm in temp_remaining if lm != next_costs[0][1]]
+                        tie_breaker_scores[tied_lm] = calculate_combined_cost(next_costs[0][1],
+                                                                              temp_remaining_excluding_current,
+                                                                              difficulty_table, prerequisite_table)
+                    else:
+                        tie_breaker_scores[tied_lm] = float(
+                            'inf')  # if there are no more remaining LMS, set score to infinity.
+                best_lm = min(tie_breaker_scores,
+                              key=tie_breaker_scores.get)  # get the LM with the lowest tie breaker score.
+            solution.append(best_lm)
+            remaining_lms.remove(best_lm)
+
+        return solution
+
+
     # Create sorted difficulty score
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
     weights = [0.4, 0.4, 0.3]
 
-    lm_sequence_indices = generate_random_permutation(n)
+    # Create random initial solution
+    #lm_sequence_indices = generate_random_permutation(n)
 
-    difficulty_score = 0
-    prerequisite_score = 0
-    interleaving_score = 0
+    # difficulty_score, prerequisite_score, interleaving_score, combined_score = report_fitness_metrics(lm_sequence_indices)
+    # print(f"Size of problem domain: {len(lm_sequence_indices)} Learning Materials")
+    # print("Score of random solution:")
+    # print("difficulty", difficulty_score)
+    # print("prerequisite", prerequisite_score)
+    # print("interleaving", interleaving_score)
+    # print("combined", combined_score)
 
-    for i in range(len(lm_sequence_indices)):
-        for j in range(len(lm_sequence_indices)):
-            if i != j:
-                if lm_sequence_indices[i] < lm_sequence_indices[j]:
-                    difficulty_score += difficulty_table[i][j]
-                    prerequisite_score += prerequisite_table[i][j]
+    # Run experiment
 
-    for i in range(len(lm_sequence_indices) - 1):
-        for j in range(i + 1, len(lm_sequence_indices)):
-            if abs(lm_sequence_indices[i] - lm_sequence_indices[j]) == 1:
-                interleaving_score += interleaving_table[i][j]
+    start_time = time.time()
+    #lm_sequence_indices = hill_climber(lm_sequence_indices, fitness_function)
+    lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
+    end_time = time.time()
 
-    combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
+    elapsed_time = end_time - start_time
+
+    difficulty_score, prerequisite_score, interleaving_score, combined_score = report_fitness_metrics(lm_sequence_indices)
+
+    print("Score of solved solution:")
     print("difficulty", difficulty_score)
     print("prerequisite", prerequisite_score)
     print("interleaving", interleaving_score)
     print("combined", combined_score)
+    print(f"Solved Solution elapsed time: {elapsed_time} seconds")
+    print("****************************************************************")
 
-    lm_sequence_indices = hill_climber(lm_sequence_indices, fitness_function)
+    data = {
+        "Student_id": int(student_id),
+        "Personalized Learning Path": str(personalized_learning_path),
+        "Number LMs": len(lm_sequence_indices),
+        "Sequence": str(lm_sequence_indices),
+        "Difficulty": difficulty_score,
+        "Prerequisite": prerequisite_score,
+        "Interleaving": interleaving_score,
+        "Combined": combined_score,
+        "Algorithm time": elapsed_time
+    }
 
+    data = pd.DataFrame(data, index=[0])
+    experiment_df = pd.concat([experiment_df, data], ignore_index=True)
+Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/Sequencing_results.csv"
+experiment_df.to_csv(Experiment)
     #lm_sequence_indices = generate_prerequisite_sorted_permutation(n, prerequisite_table)
 
-    difficulty_score = 0
-    prerequisite_score = 0
-    interleaving_score = 0
 
-    for i in range(len(lm_sequence_indices)):
-        for j in range(len(lm_sequence_indices)):
-            if i != j:
-                if lm_sequence_indices[i] < lm_sequence_indices[j]:
-                    difficulty_score += difficulty_table[i][j]
-                    prerequisite_score += prerequisite_table[i][j]
-
-    for i in range(len(lm_sequence_indices) - 1):
-        for j in range(i + 1, len(lm_sequence_indices)):
-            if abs(lm_sequence_indices[i] - lm_sequence_indices[j]) == 1:
-                interleaving_score += interleaving_table[i][j]
-
-    combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
-    print("difficulty", difficulty_score)
-    print("prerequisite", prerequisite_score)
-    print("interleaving", interleaving_score)
-    print("combined", combined_score)
 
 
 
