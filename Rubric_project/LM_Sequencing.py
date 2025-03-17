@@ -121,7 +121,10 @@ for student_id in solution_database["Student_id"]:
             for kn_i in lm_i_kn_list:
                 if kn_i in lm_j_kn_list and i != j: interleaving_table[i, j] += 1 #Increment penalty, they cover the same KN
 
-    #print("Completed tables")
+    # Calculate max for 3 objectives
+    difficulty_max = np.sum(difficulty_table)
+    prerequisite_max = np.sum(prerequisite_table)
+    interleaving_max = np.sum(np.tril(interleaving_table))
 
     for kn_list in LM_KNs_Covered:
         if len(kn_list) > 1:
@@ -130,9 +133,6 @@ for student_id in solution_database["Student_id"]:
 
     if many_to_many: print("many-to-many")
     else: print("many-to-one")
-    #many_to_many = True
-    #many_to_many = True
-
 
     def generate_random_permutation(n):
         """
@@ -293,9 +293,37 @@ for student_id in solution_database["Student_id"]:
             total_cost += difficulty_table[lm_index][other_lm] + prerequisite_table[lm_index][other_lm]
         return total_cost
 
+    # def sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table):
+    #     """
+    #     Sorts Learning Materials (LMs) based on combined prerequisite and difficulty costs.
+    #
+    #     Args:
+    #         remaining_lms: A list of LM indices to be sorted.
+    #         difficulty_table: A 2D NumPy array representing difficulty costs.
+    #         prerequisite_table: A 2D NumPy array representing prerequisite costs.
+    #
+    #     Returns:
+    #         A list of LM indices sorted according to combined costs.
+    #     """
+    #
+    #     sorted_lms = []
+    #     remaining_lms_copy = remaining_lms[:]  # Create a copy to avoid modifying the original list.
+    #     while remaining_lms_copy:
+    #         costs = []
+    #         for lm in remaining_lms_copy:
+    #             other_lms = [other for other in remaining_lms_copy if other != lm]
+    #             costs.append((calculate_combined_cost(lm, other_lms), lm))
+    #
+    #         costs.sort()  # Sort by combined cost (ascending)
+    #         best_lm = costs[0][1]  # get the lm with the lowest cost.
+    #         sorted_lms.append(best_lm)
+    #         remaining_lms_copy.remove(best_lm)
+    #
+    #     return sorted_lms
     def sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table):
         """
-        Sorts Learning Materials (LMs) based on combined prerequisite and difficulty costs.
+        Sorts Learning Materials (LMs) based on combined prerequisite and difficulty costs,
+        with tie-breaking based on the next best LM's cost.
 
         Args:
             remaining_lms: A list of LM indices to be sorted.
@@ -316,12 +344,35 @@ for student_id in solution_database["Student_id"]:
                 costs.append((calculate_combined_cost(lm, other_lms), lm))
 
             costs.sort()  # Sort by combined cost (ascending)
-            best_lm = costs[0][1]  # get the lm with the lowest cost.
+
+            best_cost = costs[0][0]
+            tie_lms = [lm for cost, lm in costs if cost == best_cost]
+
+            if len(tie_lms) > 1:  # Tie detected
+                tie_breaker_scores = {}
+                for tied_lm in tie_lms:
+                    temp_remaining = remaining_lms_copy[:]
+                    temp_remaining.remove(tied_lm)
+                    if temp_remaining:  # check if remaining is not empty.
+                        next_costs = []
+                        for next_lm in temp_remaining:
+                            next_other_lms = [other for other in temp_remaining if other != next_lm]
+                            next_costs.append((calculate_combined_cost(next_lm, next_other_lms), next_lm))
+                        next_costs.sort()
+                        next_best_cost = next_costs[0][0]
+                        tie_breaker_scores[tied_lm] = next_best_cost
+                    else:
+                        tie_breaker_scores[tied_lm] = float(
+                            'inf')  # if no remaining LMs, set tie breaker score to infinity.
+
+                best_lm = min(tie_breaker_scores, key=tie_breaker_scores.get)
+            else:
+                best_lm = tie_lms[0]
+
             sorted_lms.append(best_lm)
             remaining_lms_copy.remove(best_lm)
 
         return sorted_lms
-
 
     def greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table):
         """
@@ -409,43 +460,6 @@ for student_id in solution_database["Student_id"]:
         return difficulty_score, prerequisite_score, interleaving_score, combined_score
 
 
-
-
-    def greedy_prerequisite_sequencing_tie_breaker(n, difficulty_table, prerequisite_table):
-        """
-        Greedy algorithm with tie-breaker to sequence LMs based on combined costs.
-        """
-
-        solution = []
-        remaining_lms = list(range(n))
-
-        while remaining_lms:
-            costs = sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table)
-            best_lm = costs[0][1]
-            tie_lms = [lm for cost, lm in costs if cost == costs[0][0]]
-
-            if len(tie_lms) > 1:  # Tie detected
-                tie_breaker_scores = {}
-                for tied_lm in tie_lms:
-                    temp_remaining = remaining_lms[:]
-                    temp_remaining.remove(tied_lm)
-                    next_costs = sort_lms_by_combined_cost(temp_remaining, difficulty_table, prerequisite_table)
-                    if next_costs:
-                        temp_remaining_excluding_current = [lm for lm in temp_remaining if lm != next_costs[0][1]]
-                        tie_breaker_scores[tied_lm] = calculate_combined_cost(next_costs[0][1],
-                                                                              temp_remaining_excluding_current,
-                                                                              difficulty_table, prerequisite_table)
-                    else:
-                        tie_breaker_scores[tied_lm] = float(
-                            'inf')  # if there are no more remaining LMS, set score to infinity.
-                best_lm = min(tie_breaker_scores,
-                              key=tie_breaker_scores.get)  # get the LM with the lowest tie breaker score.
-            solution.append(best_lm)
-            remaining_lms.remove(best_lm)
-
-        return solution
-
-
     # Create sorted difficulty score
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
     weights = [0.4, 0.4, 0.3]
@@ -465,17 +479,65 @@ for student_id in solution_database["Student_id"]:
 
     start_time = time.time()
     #lm_sequence_indices = hill_climber(lm_sequence_indices, fitness_function)
-    lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
+    #lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
+    lm_sequence_indices = generate_random_permutation(n)
+    lm_sequence_indices = random_search(lm_sequence_indices, fitness_function)
+    #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
     end_time = time.time()
 
     elapsed_time = end_time - start_time
 
     difficulty_score, prerequisite_score, interleaving_score, combined_score = report_fitness_metrics(lm_sequence_indices)
 
+    # Check for worst scores of 0 and award perfect score in these cases
+
+    if difficulty_max > 0: difficulty_raw_score = (difficulty_score / difficulty_max)
+    else: difficulty_raw_score = 0.0
+
+    if prerequisite_max > 0: prerequisite_raw_score = prerequisite_score / prerequisite_max
+    else: prerequisite_max = 0.0
+
+    if interleaving_max > 0:
+        interleaving_raw_score = (interleaving_score / interleaving_max)
+    else: interleaving_raw_score = 0.0
+
+    # if difficulty_max > 0 and prerequisite_max > 0:
+    #     prerequisite_raw_score = (difficulty_score / difficulty_max) * 0.5 + (prerequisite_score / prerequisite_max) * 0.5
+    # elif difficulty_max == 0 and prerequisite_max > 0:
+    #     prerequisite_raw_score = (prerequisite_score / prerequisite_max)
+    # elif difficulty_max > 0 and prerequisite_max == 0:
+    #     prerequisite_raw_score = (difficulty_score / difficulty_max)
+    # else: prerequisite_raw_score = 0.0
+
+    difficulty_rubric_score = 1
+    if difficulty_raw_score <= 0.25: difficulty_rubric_score = 4
+    elif difficulty_raw_score <= 0.5: difficulty_rubric_score = 3
+    elif difficulty_raw_score <= 0.75: difficulty_rubric_score = 2
+
+    prerequisite_rubric_score = 1
+    if prerequisite_raw_score <= 0.25: prerequisite_rubric_score = 4
+    elif prerequisite_raw_score <= 0.5: prerequisite_rubric_score = 3
+    elif prerequisite_raw_score <= 0.75: prerequisite_rubric_score = 2
+
+    interleaving_rubric_score = 1
+    if interleaving_raw_score <= 0.25: interleaving_rubric_score = 4
+    elif interleaving_raw_score <= 0.5: interleaving_rubric_score = 3
+    elif interleaving_raw_score <= 0.75: interleaving_rubric_score = 2
+
     print("Score of solved solution:")
+    print("Number of LMs is:", len(lm_sequence_indices))
     print("difficulty", difficulty_score)
+    print("difficulty max", difficulty_max)
+    print("difficulty raw score", difficulty_raw_score)
+    print("difficulty rubric score", difficulty_rubric_score)
     print("prerequisite", prerequisite_score)
+    print("prerequisite max score", prerequisite_max)
+    print("prerequisite raw score", prerequisite_raw_score)
+    print("prerequisite rubric score", prerequisite_rubric_score)
     print("interleaving", interleaving_score)
+    print("interleaving max", interleaving_max)
+    print("interleaving raw score", interleaving_raw_score)
+    print("interleaving rubric score", interleaving_rubric_score)
     print("combined", combined_score)
     print(f"Solved Solution elapsed time: {elapsed_time} seconds")
     print("****************************************************************")
@@ -484,16 +546,27 @@ for student_id in solution_database["Student_id"]:
         "Student_id": int(student_id),
         "Personalized Learning Path": str(personalized_learning_path),
         "Number LMs": len(lm_sequence_indices),
+        "Many-to-Many": many_to_many,
         "Sequence": str(lm_sequence_indices),
         "Difficulty": difficulty_score,
+        "Difficulty Max": difficulty_max,
         "Prerequisite": prerequisite_score,
+        "Prerequisite Max": prerequisite_max,
         "Interleaving": interleaving_score,
+        "Interleaving Max": interleaving_max,
+        "Prerequisite_raw_score": prerequisite_raw_score,
+        "Interleaving_raw_score": interleaving_raw_score,
+        "Difficulty Rubric Score": difficulty_rubric_score,
+        "Prerequisite Rubric Score": prerequisite_rubric_score,
+        "Interleaving Rubric Score": interleaving_rubric_score,
         "Combined": combined_score,
         "Algorithm time": elapsed_time
     }
 
     data = pd.DataFrame(data, index=[0])
     experiment_df = pd.concat([experiment_df, data], ignore_index=True)
+
+
 Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/Sequencing_results.csv"
 experiment_df.to_csv(Experiment)
     #lm_sequence_indices = generate_prerequisite_sorted_permutation(n, prerequisite_table)
