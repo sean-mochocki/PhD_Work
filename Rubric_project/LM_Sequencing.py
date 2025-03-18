@@ -240,7 +240,7 @@ for student_id in solution_database["Student_id"]:
         # Define fitness function using raw scores for prerequisite, interleaving and difficulty sequencing.
 
         combined_score = difficulty_raw_score * weights[0] + prerequisite_raw_score * weights[1] + interleaving_raw_score * weights[2]
-
+        #combined_score = prerequisite_raw_score *0.5 + interleaving_raw_score *0.5
         return combined_score
 
     # def fitness_function (solution):
@@ -459,6 +459,33 @@ for student_id in solution_database["Student_id"]:
 
         return best_solution
 
+
+    def exhaustive_search(n, fitness_function):
+        """
+        Performs an exhaustive search on the solution space and returns the best solution.
+
+        Args:
+            solution_space: An iterable (e.g., list, tuple) representing the possible solutions.
+                            If the solution space is a permutation problem, this should be a list of the items to be permuted.
+            fitness_function: A function that takes a solution as input and returns its fitness score.
+
+        Returns:
+            The best solution found and its fitness score.
+        """
+        solution_space = list(range(n))
+        best_solution = None
+        best_fitness = float('inf')  # Initialize with positive infinity (assuming minimization)
+
+        for solution in itertools.permutations(solution_space):
+
+            current_fitness = fitness_function(list(solution))  # Convert tuple to list for consistency
+
+            if current_fitness < best_fitness:  # Assuming minimization
+                best_fitness = current_fitness
+                best_solution = list(solution)  # Store the solution as a list
+
+        return best_solution
+
     def random_search(solution, fitness_function, max_iterations=1000):
         """
         Random search algorithm.
@@ -539,10 +566,12 @@ for student_id in solution_database["Student_id"]:
     # Run experiment
 
     start_time = time.time()
+    if n < 10: lm_sequence_indices = exhaustive_search(n, fitness_function)
+    else:
     #lm_sequence_indices = hill_climber(lm_sequence_indices, fitness_function)
-    lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
-    #lm_sequence_indices = generate_random_permutation(n)
-    #lm_sequence_indices = random_search(lm_sequence_indices, fitness_function)
+    #lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
+        lm_sequence_indices = generate_random_permutation(n)
+        lm_sequence_indices = random_search(lm_sequence_indices, fitness_function)
     #lm_sequence_indices = simulated_annealing(lm_sequence_indices, fitness_function, 100, 0.99, 1000)
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
     end_time = time.time()
