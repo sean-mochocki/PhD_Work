@@ -503,7 +503,7 @@ for student_id in solution_database["Student_id"]:
         best_solution = copy.deepcopy(solution)
         current_solution = copy.deepcopy(solution)
 
-        iterations_without_improvement = 0
+        # iterations_without_improvement = 0
 
         for _ in range(max_iterations):
             i, j = random.sample(range(len(current_solution)), 2)  # Randomly select two distinct indices
@@ -516,12 +516,12 @@ for student_id in solution_database["Student_id"]:
                 best_fitness = neighbor_fitness
                 best_solution = neighbor_solution
                 current_solution = neighbor_solution
-                iterations_without_improvement = 0  # Reset counter
-            else:
-                iterations_without_improvement += 1
+                # iterations_without_improvement = 0  # Reset counter
+            # else:
+            #     iterations_without_improvement += 1
 
-            if iterations_without_improvement >= max_iterations:
-                break
+            # if iterations_without_improvement >= max_iterations:
+            #     break
 
         return best_solution
 
@@ -550,7 +550,7 @@ for student_id in solution_database["Student_id"]:
 
     # Create sorted difficulty score
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
-    weights = [0.3333, 0.3333, 0.3334]
+    weights = [0.33333, 0.33333, 0.33333]
 
     # Create random initial solution
     #lm_sequence_indices = generate_random_permutation(n)
@@ -563,100 +563,127 @@ for student_id in solution_database["Student_id"]:
     # print("interleaving", interleaving_score)
     # print("combined", combined_score)
 
+
+    num_iterations = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+    initial_temperature = [200, 150, 100]
+    cooling_rate = [0.999, 0.99, 0.95]
+
+    # num_iterations = [1000, 2000]
+    # initial_temperature = [200, 100]
+    # cooling_rate = [0.99, 0.95]
+
+    parameter_combinations = list(itertools.product(
+        num_iterations,
+        initial_temperature,
+        cooling_rate
+    ))
+
     # Run experiment
 
-    start_time = time.time()
-    if n < 10: lm_sequence_indices = exhaustive_search(n, fitness_function)
-    else:
+
+    #if n < 10: lm_sequence_indices = exhaustive_search(n, fitness_function)
+    #else:
     #lm_sequence_indices = hill_climber(lm_sequence_indices, fitness_function)
     #lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
+
+    #for iterations in num_iterations:
+    for combination in parameter_combinations:
+        num_iterations, initial_temperature, cooling_rate = combination
+
         lm_sequence_indices = generate_random_permutation(n)
-        lm_sequence_indices = random_search(lm_sequence_indices, fitness_function)
-    #lm_sequence_indices = simulated_annealing(lm_sequence_indices, fitness_function, 100, 0.99, 1000)
-    #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
-    end_time = time.time()
+        start_time = time.time()
+        #lm_sequence_indices = random_search(lm_sequence_indices, fitness_function, iterations)
+        lm_sequence_indices = simulated_annealing(lm_sequence_indices, fitness_function, initial_temperature, cooling_rate, num_iterations)
+        #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
+        end_time = time.time()
 
-    elapsed_time = end_time - start_time
+        elapsed_time = end_time - start_time
 
-    difficulty_score, prerequisite_score, interleaving_score, combined_score = report_fitness_metrics(lm_sequence_indices)
+        difficulty_score, prerequisite_score, interleaving_score, combined_score = report_fitness_metrics(lm_sequence_indices)
 
-    # Check for worst scores of 0 and award perfect score in these cases
+        # Check for worst scores of 0 and award perfect score in these cases
 
-    if difficulty_max > 0: difficulty_raw_score = (difficulty_score / difficulty_max)
-    else: difficulty_raw_score = 0.0
+        if difficulty_max > 0: difficulty_raw_score = (difficulty_score / difficulty_max)
+        else: difficulty_raw_score = 0.0
 
-    if prerequisite_max > 0: prerequisite_raw_score = prerequisite_score / prerequisite_max
-    else: prerequisite_raw_score = 0.0
+        if prerequisite_max > 0: prerequisite_raw_score = prerequisite_score / prerequisite_max
+        else: prerequisite_raw_score = 0.0
 
-    if interleaving_max > 0:
-        interleaving_raw_score = (interleaving_score / interleaving_max)
-    else: interleaving_raw_score = 0.0
+        if interleaving_max > 0:
+            interleaving_raw_score = (interleaving_score / interleaving_max)
+        else: interleaving_raw_score = 0.0
 
-    # if difficulty_max > 0 and prerequisite_max > 0:
-    #     prerequisite_raw_score = (difficulty_score / difficulty_max) * 0.5 + (prerequisite_score / prerequisite_max) * 0.5
-    # elif difficulty_max == 0 and prerequisite_max > 0:
-    #     prerequisite_raw_score = (prerequisite_score / prerequisite_max)
-    # elif difficulty_max > 0 and prerequisite_max == 0:
-    #     prerequisite_raw_score = (difficulty_score / difficulty_max)
-    # else: prerequisite_raw_score = 0.0
+        # if difficulty_max > 0 and prerequisite_max > 0:
+        #     prerequisite_raw_score = (difficulty_score / difficulty_max) * 0.5 + (prerequisite_score / prerequisite_max) * 0.5
+        # elif difficulty_max == 0 and prerequisite_max > 0:
+        #     prerequisite_raw_score = (prerequisite_score / prerequisite_max)
+        # elif difficulty_max > 0 and prerequisite_max == 0:
+        #     prerequisite_raw_score = (difficulty_score / difficulty_max)
+        # else: prerequisite_raw_score = 0.0
 
-    difficulty_rubric_score = 1
-    if difficulty_raw_score <= 0.25: difficulty_rubric_score = 4
-    elif difficulty_raw_score <= 0.5: difficulty_rubric_score = 3
-    elif difficulty_raw_score <= 0.75: difficulty_rubric_score = 2
+        difficulty_rubric_score = 1
+        if difficulty_raw_score <= 0.25: difficulty_rubric_score = 4
+        elif difficulty_raw_score <= 0.5: difficulty_rubric_score = 3
+        elif difficulty_raw_score <= 0.75: difficulty_rubric_score = 2
 
-    prerequisite_rubric_score = 1
-    if prerequisite_raw_score <= 0.25: prerequisite_rubric_score = 4
-    elif prerequisite_raw_score <= 0.5: prerequisite_rubric_score = 3
-    elif prerequisite_raw_score <= 0.75: prerequisite_rubric_score = 2
+        prerequisite_rubric_score = 1
+        if prerequisite_raw_score <= 0.25: prerequisite_rubric_score = 4
+        elif prerequisite_raw_score <= 0.5: prerequisite_rubric_score = 3
+        elif prerequisite_raw_score <= 0.75: prerequisite_rubric_score = 2
 
-    interleaving_rubric_score = 1
-    if interleaving_raw_score <= 0.25: interleaving_rubric_score = 4
-    elif interleaving_raw_score <= 0.5: interleaving_rubric_score = 3
-    elif interleaving_raw_score <= 0.75: interleaving_rubric_score = 2
+        interleaving_rubric_score = 1
+        if interleaving_raw_score <= 0.25: interleaving_rubric_score = 4
+        elif interleaving_raw_score <= 0.5: interleaving_rubric_score = 3
+        elif interleaving_raw_score <= 0.75: interleaving_rubric_score = 2
 
-    print("Score of solved solution:")
-    print("Number of LMs is:", len(lm_sequence_indices))
-    print("difficulty", difficulty_score)
-    print("difficulty max", difficulty_max)
-    print("difficulty raw score", difficulty_raw_score)
-    print("difficulty rubric score", difficulty_rubric_score)
-    print("prerequisite", prerequisite_score)
-    print("prerequisite max score", prerequisite_max)
-    print("prerequisite raw score", prerequisite_raw_score)
-    print("prerequisite rubric score", prerequisite_rubric_score)
-    print("interleaving", interleaving_score)
-    print("interleaving max", interleaving_max)
-    print("interleaving raw score", interleaving_raw_score)
-    print("interleaving rubric score", interleaving_rubric_score)
-    print("combined", combined_score)
-    print(f"Solved Solution elapsed time: {elapsed_time} seconds")
-    print("****************************************************************")
+        print("Score of solved solution:")
+        print("Number of iterations is: ", num_iterations)
+        print("Cooling Rate is:", cooling_rate)
+        print("Initial Temperature is:", initial_temperature)
+        print("Number of LMs is:", len(lm_sequence_indices))
+        print("difficulty", difficulty_score)
+        print("difficulty max", difficulty_max)
+        print("difficulty raw score", difficulty_raw_score)
+        print("difficulty rubric score", difficulty_rubric_score)
+        print("prerequisite", prerequisite_score)
+        print("prerequisite max score", prerequisite_max)
+        print("prerequisite raw score", prerequisite_raw_score)
+        print("prerequisite rubric score", prerequisite_rubric_score)
+        print("interleaving", interleaving_score)
+        print("interleaving max", interleaving_max)
+        print("interleaving raw score", interleaving_raw_score)
+        print("interleaving rubric score", interleaving_rubric_score)
+        print("combined", combined_score)
+        print(f"Solved Solution elapsed time: {elapsed_time} seconds")
+        print("****************************************************************")
 
-    data = {
-        "Student_id": int(student_id),
-        "Personalized Learning Path": str(personalized_learning_path),
-        "Number LMs": len(lm_sequence_indices),
-        "Many-to-Many": many_to_many,
-        "Sequence": str(lm_sequence_indices),
-        "Difficulty": difficulty_score,
-        "Difficulty Max": difficulty_max,
-        "Difficulty Raw Score": difficulty_raw_score,
-        "Prerequisite": prerequisite_score,
-        "Prerequisite Max": prerequisite_max,
-        "Interleaving": interleaving_score,
-        "Interleaving Max": interleaving_max,
-        "Prerequisite_raw_score": prerequisite_raw_score,
-        "Interleaving_raw_score": interleaving_raw_score,
-        "Difficulty Rubric Score": difficulty_rubric_score,
-        "Prerequisite Rubric Score": prerequisite_rubric_score,
-        "Interleaving Rubric Score": interleaving_rubric_score,
-        "Combined": combined_score,
-        "Algorithm time": elapsed_time
-    }
+        data = {
+            "Student_id": int(student_id),
+            "Number Iterations": num_iterations,
+            "Cooling Rate": cooling_rate,
+            "Initial Temperature": initial_temperature,
+            "Personalized Learning Path": str(personalized_learning_path),
+            "Number LMs": len(lm_sequence_indices),
+            "Many-to-Many": many_to_many,
+            "Sequence": str(lm_sequence_indices),
+            "Difficulty": difficulty_score,
+            "Difficulty Max": difficulty_max,
+            "Difficulty Raw Score": difficulty_raw_score,
+            "Prerequisite": prerequisite_score,
+            "Prerequisite Max": prerequisite_max,
+            "Interleaving": interleaving_score,
+            "Interleaving Max": interleaving_max,
+            "Prerequisite_raw_score": prerequisite_raw_score,
+            "Interleaving_raw_score": interleaving_raw_score,
+            "Difficulty Rubric Score": difficulty_rubric_score,
+            "Prerequisite Rubric Score": prerequisite_rubric_score,
+            "Interleaving Rubric Score": interleaving_rubric_score,
+            "Combined": combined_score,
+            "Algorithm time": elapsed_time
+        }
 
-    data = pd.DataFrame(data, index=[0])
-    experiment_df = pd.concat([experiment_df, data], ignore_index=True)
+        data = pd.DataFrame(data, index=[0])
+        experiment_df = pd.concat([experiment_df, data], ignore_index=True)
 
 
 Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/Sequencing_results.csv"

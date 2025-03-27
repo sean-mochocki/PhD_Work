@@ -508,9 +508,6 @@ for student_profile_id in range(len(profile_database)):
         def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
                                               Rubric_min_time, Rubric_max_time, max_failed_attempts=10000):
 
-            #Split population in half - half will be created to be a set cover and satisfy time constraints, half will be random
-            # valid_population_size = population_size // 2
-
             population = np.zeros((population_size, num_genes), dtype=int)
             valid_count = 0
             failed_attempts = 0
@@ -600,14 +597,6 @@ for student_profile_id in range(len(profile_database)):
                     valid_count += 1
                     failed_attempts = 0
 
-            # # Randomly create the remaining chromosomes
-            # random_count = 0
-            # while random_count < population_size - valid_population_size:
-            #     chromosome = np.random.choice([0, 1], size=num_genes)
-            #     population[valid_population_size + random_count] = chromosome
-            #     random_count += 1
-
-            #print(len(population))
             print("Population successfully created")
             return population
 
