@@ -192,7 +192,7 @@ mask =  initial_population_df[parameter_columns].apply(tuple, axis=1) == best_co
 matching_rows = initial_population_df[mask]
 matching_rows = matching_rows.drop_duplicates(subset=["Student_id"], keep='first')
 
-Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/best_random_population_solution.csv"
+Experiment = "Experiment_Results/Experiment.csv"
 matching_rows.to_csv(Experiment)
 
 if best_consistent_params:

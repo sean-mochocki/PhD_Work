@@ -6,15 +6,12 @@ import random
 import copy
 import itertools
 import math
-from deap import base, creator, tools
-import ast
 import time
-from scipy.optimize import dual_annealing
 
-knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
-knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
-learning_materials = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learning_Materials_Base_set.xlsx"
-LM_selection_solutions = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/best_initial_population_solution.csv"
+knowledge_nodes = "Data/Knowledge_Nodes.txt"
+knowledge_graph_edges = "Data/Knowledge_Graph_Edges.txt"
+learning_materials = "Data/Learning_Materials_Base_set.xlsx"
+LM_selection_solutions = "Data/best_initial_population_solution.csv"
 
 # Identify the names of the knowledge nodes
 with open(knowledge_nodes, 'r') as file:
@@ -240,29 +237,7 @@ for student_id in solution_database["Student_id"]:
         # Define fitness function using raw scores for prerequisite, interleaving and difficulty sequencing.
 
         combined_score = difficulty_raw_score * weights[0] + prerequisite_raw_score * weights[1] + interleaving_raw_score * weights[2]
-        #combined_score = prerequisite_raw_score *0.5 + interleaving_raw_score *0.5
         return combined_score
-
-    # def fitness_function (solution):
-    #     difficulty_score = 0
-    #     prerequisite_score = 0
-    #     interleaving_score = 0
-    #
-    #     for i in range(len(solution)):
-    #         for j in range(len(solution)):
-    #             if i != j:
-    #                 if solution[i] < solution[j]:
-    #                     difficulty_score += difficulty_table[i][j]
-    #                     prerequisite_score += prerequisite_table[i][j]
-    #
-    #     for i in range(len(solution) - 1):
-    #         for j in range(i + 1, len(solution)):
-    #             if abs(solution[i] - solution[j]) == 1:
-    #                 interleaving_score += interleaving_table[i][j]
-    #
-    #     combined_score = difficulty_score * weights[0] + prerequisite_score * weights[1] + interleaving_score * weights[2]
-    #
-    #     return combined_score
 
 
     def hill_climber(solution, fitness_function):
@@ -310,33 +285,7 @@ for student_id in solution_database["Student_id"]:
             total_cost += difficulty_table[lm_index][other_lm] + prerequisite_table[lm_index][other_lm]
         return total_cost
 
-    # def sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table):
-    #     """
-    #     Sorts Learning Materials (LMs) based on combined prerequisite and difficulty costs.
-    #
-    #     Args:
-    #         remaining_lms: A list of LM indices to be sorted.
-    #         difficulty_table: A 2D NumPy array representing difficulty costs.
-    #         prerequisite_table: A 2D NumPy array representing prerequisite costs.
-    #
-    #     Returns:
-    #         A list of LM indices sorted according to combined costs.
-    #     """
-    #
-    #     sorted_lms = []
-    #     remaining_lms_copy = remaining_lms[:]  # Create a copy to avoid modifying the original list.
-    #     while remaining_lms_copy:
-    #         costs = []
-    #         for lm in remaining_lms_copy:
-    #             other_lms = [other for other in remaining_lms_copy if other != lm]
-    #             costs.append((calculate_combined_cost(lm, other_lms), lm))
-    #
-    #         costs.sort()  # Sort by combined cost (ascending)
-    #         best_lm = costs[0][1]  # get the lm with the lowest cost.
-    #         sorted_lms.append(best_lm)
-    #         remaining_lms_copy.remove(best_lm)
-    #
-    #     return sorted_lms
+
     def sort_lms_by_combined_cost(remaining_lms, difficulty_table, prerequisite_table):
         """
         Sorts Learning Materials (LMs) based on combined prerequisite and difficulty costs,
@@ -512,16 +461,10 @@ for student_id in solution_database["Student_id"]:
             neighbor_solution[i], neighbor_solution[j] = neighbor_solution[j], neighbor_solution[i]
             neighbor_fitness = fitness_function(neighbor_solution)
 
-            if neighbor_fitness < best_fitness:  # changed to less than.
+            if neighbor_fitness < best_fitness:
                 best_fitness = neighbor_fitness
                 best_solution = neighbor_solution
                 current_solution = neighbor_solution
-                # iterations_without_improvement = 0  # Reset counter
-            # else:
-            #     iterations_without_improvement += 1
-
-            # if iterations_without_improvement >= max_iterations:
-            #     break
 
         return best_solution
 
@@ -552,18 +495,6 @@ for student_id in solution_database["Student_id"]:
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
     weights = [0.33333, 0.33333, 0.33333]
 
-    # Create random initial solution
-    #lm_sequence_indices = generate_random_permutation(n)
-
-    # difficulty_score, prerequisite_score, interleaving_score, combined_score = report_fitness_metrics(lm_sequence_indices)
-    # print(f"Size of problem domain: {len(lm_sequence_indices)} Learning Materials")
-    # print("Score of random solution:")
-    # print("difficulty", difficulty_score)
-    # print("prerequisite", prerequisite_score)
-    # print("interleaving", interleaving_score)
-    # print("combined", combined_score)
-
-
     num_iterations = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
     initial_temperature = [200, 150, 100]
     cooling_rate = [0.999, 0.99, 0.95]
@@ -579,7 +510,6 @@ for student_id in solution_database["Student_id"]:
     ))
 
     # Run experiment
-
 
     #if n < 10: lm_sequence_indices = exhaustive_search(n, fitness_function)
     #else:
@@ -612,14 +542,6 @@ for student_id in solution_database["Student_id"]:
         if interleaving_max > 0:
             interleaving_raw_score = (interleaving_score / interleaving_max)
         else: interleaving_raw_score = 0.0
-
-        # if difficulty_max > 0 and prerequisite_max > 0:
-        #     prerequisite_raw_score = (difficulty_score / difficulty_max) * 0.5 + (prerequisite_score / prerequisite_max) * 0.5
-        # elif difficulty_max == 0 and prerequisite_max > 0:
-        #     prerequisite_raw_score = (prerequisite_score / prerequisite_max)
-        # elif difficulty_max > 0 and prerequisite_max == 0:
-        #     prerequisite_raw_score = (difficulty_score / difficulty_max)
-        # else: prerequisite_raw_score = 0.0
 
         difficulty_rubric_score = 1
         if difficulty_raw_score <= 0.25: difficulty_rubric_score = 4
@@ -686,7 +608,7 @@ for student_id in solution_database["Student_id"]:
         experiment_df = pd.concat([experiment_df, data], ignore_index=True)
 
 
-Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/Sequencing_results.csv"
+Experiment = "Experiment_Results/Experiment.csv"
 experiment_df.to_csv(Experiment)
     #lm_sequence_indices = generate_prerequisite_sorted_permutation(n, prerequisite_table)
 

@@ -1,7 +1,6 @@
 import igraph as ig
 import pandas as pd
 import ast
-import os
 from sklearn.preprocessing import OneHotEncoder
 import seaborn as sns
 from sentence_transformers import SentenceTransformer, util
@@ -9,16 +8,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pygad
 import torch
-import math
-import random
 from pulp import *
 import time
 import itertools
+import random
 
-knowledge_nodes = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Nodes.txt"
-knowledge_graph_edges = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Knowledge_Graph_Edges.txt"
-learner_profile = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learner_Profile_8_Jan_2025.xlsx"
-learning_materials = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Data/Learning_Materials_Base_set.xlsx"
+knowledge_nodes = "Data/Knowledge_Nodes.txt"
+knowledge_graph_edges = "Data/Knowledge_Graph_Edges.txt"
+learner_profile = "Data/Learner_Profile_8_Jan_2025.xlsx"
+learning_materials = "Data/Learning_Materials_Base_set.xlsx"
 
 # This is the section where we create the Knowledge Graph
 
@@ -132,44 +130,37 @@ LM_difficulty_int = LM_difficulty.map(difficulty_to_int)
 # lm_CTML_score - a list of floats describing the CTML value of the LMs from 1 to 4
 # lm_time_taken - a list of integers describing the length of LMs multiplied (Minutes + seconds) *100
 # KNs - The list of all KNs as strings
+# LM_database['embeddings'] - used to calculate cohesiveness score
 # ********************************************************************
 
 # Derive the set of learner profiles from the dataframe
 profile_database = pd.read_excel(learner_profile)
 profile_database['goals'] = profile_database['goals'].apply(lambda x: ast.literal_eval(x) if x != '[]' else [])
 
-# This is the point in the code where we start solving problems for individual learners. This will be a loop in the final version
-#experiment_df = pd.DataFrame(columns=["Student_id", "Personalized Learning Path", "Total number of LMs", "Difficulty Average", "Media Matching Average", "CTML Average", "Cohesiveness Average",
-#                                      "Balance Average", "PLP Duration", "Coherence Average", "Segmenting Average", "MDIP Average"])
 experiment_df = pd.DataFrame()
 
 for student_profile_id in range(len(profile_database)):
-
-    #student_profile_id = 8
     print("Student profile is: ", student_profile_id )
 
     goal_nodes = profile_database['goals'][student_profile_id]
 
+    # The Knowledge graph is derived from a taxonomy, so it has the property that there is only one path from each KN to
+    # the root KN. We use that function here to derive KNs that should be included in the goal KNs.
     KS = []
     for goals in goal_nodes:
         if goals != 1:
             paths = KG.get_shortest_paths(goals-1, 0)
             for path in paths:
                 KS.extend(path)  # Append individual nodes from each path
-        #if goals != 1: KS.extend(KG.get_shortest_paths(goals-1, 0))
 
     # Delete duplicates from the knowledge set
     KS = list(set(KS))
     # Calculate the names of the KNs in KS
     KS_names = [KNs[i] for i in KS]
 
-
-
     # Multiply by 100 for convenience when comparing student learning goal times to LM times
     max_time = int(profile_database['maximum_time'][student_profile_id]) * 100
     min_time = int(profile_database['minimum_time'][student_profile_id]) * 100
-
-
 
     # Get the first element of the column as a string
     cog_levels_str = profile_database['cognitive_levels'][student_profile_id]
@@ -212,8 +203,6 @@ for student_profile_id in range(len(profile_database)):
 
     # Decide where the student's preferred_media matches the LM media type
     LM_media_match = [1 if x == preferred_media else 0 for x in LM_database['Engagement Type']]
-    #print(preferred_media)
-    #print(LM_media_match)
 
     LM_overall_preference_score = [0]*len(LM_media_match)
     if preferred_media == 'no_preference':
@@ -221,8 +210,6 @@ for student_profile_id in range(len(profile_database)):
     else:
         for index, value in enumerate(LM_media_match):
             LM_overall_preference_score[index] = (LM_media_match[index] + flipped_preference_score[index]) / 2
-        #LM_overall_preference_score =average_arrays(flipped_preference_score, LM_media_match)
-    #print(LM_overall_preference_score)
 
     LM_titles = LM_database['Title']
 
@@ -232,7 +219,7 @@ for student_profile_id in range(len(profile_database)):
     # Create a dictionary that lets us look up KNs and determine the learner cognitive level
     KN_cog_level_dict = dict(zip(KNs, cog_levels_list))
 
-    # Define the many-to-one relationship between LMs and KNs.
+    # Define the many-to-many relationship between LMs and KNs.
     LM_KNs_Covered = LM_database['KNs Covered']
 
     def max_non_goal_kns_covered(KS_names, LM_KNs_Covered):
@@ -329,7 +316,6 @@ for student_profile_id in range(len(profile_database)):
         normalized_segmenting = max(0.0, min(1.0, normalized_segmenting))  # Clip to [0, 1] (Good practice)
 
         return normalized_segmenting
-
 
     #Calculate the max average Multiple Document Integration Principle Score
     personalized_learning_path = np.ones(len(LM_database), dtype=int)  # Creates an array of 1s (integers)
@@ -445,11 +431,8 @@ for student_profile_id in range(len(profile_database)):
 
     # Show the plot
 
-    #print(matching_scores)
     run_GA = True
     if run_GA:
-
-
         def generate_initial_population(population_size, num_genes, inclusion_probability):
             population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
 
@@ -499,10 +482,6 @@ for student_profile_id in range(len(profile_database)):
                 return "There is a solution to the set cover problem"
             else:
                 return "No solution to set cover problem"  # No solution found
-
-
-        import numpy as np
-        import random
 
 
         def generate_valid_initial_population(population_size, num_genes, KS_names, LM_KNs_Covered, lm_time_taken,
@@ -601,379 +580,6 @@ for student_profile_id in range(len(profile_database)):
             return population
 
 
-
-
-        def generate_initial_population_seeds(population_size, num_genes, lm_time_taken, min_time, max_time, num_seeds, matching_scores, LM_overall_preference_score, LM_KNs_Covered, KS_names):
-            population = np.zeros((population_size, num_genes), dtype=int)  # Pre-allocate
-            lm_time_taken = np.array(lm_time_taken)
-            matching_scores = np.array(matching_scores)
-
-            if population_size <= num_seeds *3: num_seeds = population_size //3
-
-            time_interval_seeds_count = 0
-
-            while time_interval_seeds_count < num_seeds:
-                original_indices = np.argsort(lm_time_taken)[::-1]  # sort in descending order
-                sorted_times = lm_time_taken[original_indices]
-                included_LM_indices = []
-                probability = 0.75
-                current_time = 0
-
-                # Creating this code will be composed of deterministic and stochastic steps
-                while current_time < min_time and len(sorted_times) > 0:
-                    # Prioritize LMs that cover KS_names
-                    valid_lm_indices = []
-                    valid_lm_times = []
-                    for i, lm_index in enumerate(original_indices):
-                        if any(kn in LM_KNs_Covered[lm_index] for kn in KS_names) and current_time + sorted_times[i] <= max_time:
-                            valid_lm_indices.append(lm_index)
-                            valid_lm_times.append(sorted_times[i])
-
-                    if valid_lm_indices:  # If there are valid LMs that cover KS_names
-                        if random.random() < probability:
-                            # Deterministic step: Choose the first valid LM
-                            lm_index = valid_lm_indices[0]
-                            lm_time = valid_lm_times[0]
-                        else:
-                            # Stochastic step: Choose a random valid LM
-                            random_index = random.randint(0, len(valid_lm_indices) - 1)
-                            lm_index = valid_lm_indices[random_index]
-                            lm_time = valid_lm_times[random_index]
-
-                        included_LM_indices.append(lm_index)
-                        current_time += lm_time
-                        # Remove chosen LM from sorted_times and original_indices
-                        index_in_original = np.where(original_indices == lm_index)[0][0]
-                        original_indices = np.delete(original_indices, index_in_original)
-                        sorted_times = np.delete(sorted_times, index_in_original)
-
-                    else:  # If no LMs cover KS_names, choose any LM that fits the time constraint
-                        if random.random() < probability:
-                            if current_time + sorted_times[0] <= max_time:
-                                included_LM_indices.append(original_indices[0])
-                                current_time += sorted_times[0]
-                                sorted_times = np.delete(sorted_times, 0)
-                                original_indices = np.delete(original_indices, 0)
-                        else:
-                            if len(sorted_times) > 0:  # Check if sorted_times is not empty
-                                random_index = random.randint(0, len(sorted_times) - 1)  # get a random index
-                                random_num = sorted_times[random_index]
-                                if current_time + random_num <= max_time:
-                                    included_LM_indices.append(
-                                        original_indices[random_index])  # append the original index.
-                                    current_time += random_num
-                                    sorted_times = np.delete(sorted_times, random_index)
-                                    original_indices = np.delete(original_indices, random_index)
-
-                # #Creating this code will be composed of deterministic and stochastic steps
-                # while current_time < min_time and len(sorted_times) > 0:
-                #     if random.random() < probability:
-                #         included_LM_indices.append(original_indices[0])
-                #         current_time += sorted_times[0]
-                #         sorted_times = np.delete(sorted_times, 0)
-                #         original_indices = np.delete(original_indices, 0)
-                #     else:
-                #         if len(sorted_times) > 0:  # Check if sorted_times is not empty
-                #             random_index = random.randint(0, len(sorted_times) - 1)  # get a random index
-                #             random_num = sorted_times[random_index]
-                #             if current_time + random_num <= max_time:
-                #                 included_LM_indices.append(original_indices[random_index])  # append the original index.
-                #                 current_time += random_num
-                #                 sorted_times = np.delete(sorted_times, random_index)
-                #                 original_indices = np.delete(original_indices, random_index)
-
-                if min_time <= current_time <= max_time and len(included_LM_indices) >= 2:
-                    #print("Time of initialized PLP is:", current_time)
-                    for lm_index in included_LM_indices:
-                        population[time_interval_seeds_count, lm_index] = 1
-
-                    time_interval_seeds_count = time_interval_seeds_count + 1
-                else: pass
-
-            # Add random seeds where only LMs with favorable scores are included
-            matching_scores_seeds_count = 0
-            while matching_scores_seeds_count < num_seeds:
-                chromosome = np.zeros(num_genes, dtype=int)
-                for i, score in enumerate(matching_scores):
-                    if score > 0 and random.random() < 0.5:
-                        chromosome[i] = 1
-                population[time_interval_seeds_count + matching_scores_seeds_count] = chromosome
-                matching_scores_seeds_count += 1
-
-            # Add KS_Names seed section.
-            KS_names_seeds_count = 0
-            while KS_names_seeds_count < num_seeds:
-                chromosome = np.zeros(num_genes, dtype=int)
-                for lm_index, kn_list in enumerate(LM_KNs_Covered):
-                    if any(kn in kn_list for kn in KS_names) and random.random() < 0.5:
-                        chromosome[lm_index] = 1 if chromosome[lm_index] == 0 else 0  # flip the gene
-                population[
-                    time_interval_seeds_count + matching_scores_seeds_count + KS_names_seeds_count] = chromosome
-                KS_names_seeds_count += 1
-
-            remaining_population_size = population_size - (time_interval_seeds_count + matching_scores_seeds_count + KS_names_seeds_count)
-
-            if remaining_population_size > 0:
-                random_population = np.random.choice([0, 1], size=(remaining_population_size, num_genes), p=[0.5, 0.5])
-                population[time_interval_seeds_count + matching_scores_seeds_count + KS_names_seeds_count:population_size, :] = random_population
-
-            np.random.shuffle(population)
-
-            # Check to confirm if all KNs are covered by LMs. If not - add LMs randomly until all KNs are covered
-            for chromosome in population:
-                # Check coverage for each KN in KS_names
-                while True:
-                    kn_coverage = {kn: False for kn in KS_names}  # track coverage
-
-                    for i, lm_active in enumerate(chromosome):
-                        if lm_active:
-                            for kn in LM_KNs_Covered[i]:
-                                if kn in kn_coverage:
-                                    kn_coverage[kn] = True
-
-                    if all(kn_coverage.values()):  # All KNs covered, break the loop
-                        break
-
-                    # If not all KNs are covered, randomly flip LMs to fix it
-                    missing_kns = [kn for kn, covered in kn_coverage.items() if not covered]
-
-                    # Find LMs that cover the missing KNs.
-                    potential_lms_to_flip = []
-                    for kn in missing_kns:
-                        for i, covered_kns in enumerate(LM_KNs_Covered):
-                            if kn in covered_kns:
-                                potential_lms_to_flip.append(i)
-
-                    if not potential_lms_to_flip:
-                        # This should rarely happen, but it's a safety check.
-                        # If no LMs cover the missing KNs, raise an error or handle accordingly.
-                        print("Error: No LMs cover all missing KNs. Check LM_KNs_Covered.")
-                        return population  # or raise an error
-
-                    lm_to_flip = random.choice(potential_lms_to_flip)
-                    chromosome[lm_to_flip] = 1 - chromosome[lm_to_flip]  # Flip the LM
-
-            print("initial population is complete")
-            return population
-
-        def generate_initial_population_sliding_probability(population_size, num_genes, KS_names, LM_KNs_Covered,
-                                                            ratio):
-            """
-            Generates an initial population with sliding inclusion probabilities.
-
-            Args:
-                population_size: The number of solutions in the population.
-                num_genes: The number of learning materials (genes).
-                KS_names: A list of Knowledge Statement names.
-                LM_KNs_Covered: A list of sets, where each set contains the KNs covered by a learning material.
-                ratio: an integer describing the probability of inclusion of LMs that cover goal KNs vs non-goal KNs
-            Returns:
-                A NumPy array representing the initial population.
-            """
-
-            population = np.zeros((population_size, num_genes), dtype=int)
-            i = 1  # Start at i = 1
-
-            # Calculate probability increment
-            probability_increment = 1.0 / (population_size - 1) if population_size > 1 else 1.0
-
-            while i < population_size + 1:  # Iterate up to population_size + 1
-                solution = np.zeros(num_genes, dtype=int)  # Initialize solution with zeros
-
-                # Calculate base probability for non-KS LMs
-                base_probability = i * probability_increment
-                base_probability = min(base_probability, 1.0)  # Ensure base probability never exceeds 1.0
-
-                for gene_index in range(num_genes):
-                    covered_kn_names = LM_KNs_Covered[gene_index]
-                    covers_ks = any(kn_name in KS_names for kn_name in covered_kn_names)
-
-                    if covers_ks:
-                        inclusion_prob = min(base_probability * ratio,
-                                             1.0)  # KS probability (ratio times, capped at 1.0)
-                    else:
-                        inclusion_prob = base_probability  # non-KS probability
-
-                    solution[gene_index] = np.random.choice([0, 1], p=[1 - inclusion_prob, inclusion_prob])
-
-                num_LMs = np.sum(solution)
-                if num_LMs >= 2:
-                    population[i - 1] = solution  # adjust for i starting at 1.
-                    i += 1
-
-            print("Initial population with sliding probability is complete")
-            return population
-
-        def generate_initial_population_weighted(population_size, num_genes, inclusion_probability_non_KS,
-                                                 inclusion_probability_KS, KS_names, LM_KNs_Covered):
-            """
-            Generates an initial population with weighted inclusion probabilities.
-
-            Args:
-                population_size: The number of solutions in the population.
-                num_genes: The number of learning materials (genes).
-                inclusion_probability_non_KS: Inclusion probability for LMs not covering any KS.
-                inclusion_probability_KS: Inclusion probability for LMs covering at least one KS.
-                KS_names: A list of Knowledge Statement names.
-                LM_KNs_Covered: A list of sets, where each set contains the KNs covered by a learning material.
-
-            Returns:
-                A NumPy array representing the initial population.
-            """
-
-            population = np.zeros((population_size, num_genes), dtype=int)
-            i = 0
-
-            while i < population_size:
-                solution = np.zeros(num_genes, dtype=int)  # Initialize solution with zeros
-
-                for gene_index in range(num_genes):
-                    covered_kn_names = LM_KNs_Covered[gene_index]
-                    covers_ks = any(kn_name in KS_names for kn_name in covered_kn_names)
-
-                    if covers_ks:
-                        inclusion_prob = inclusion_probability_KS
-                    else:
-                        inclusion_prob = inclusion_probability_non_KS
-
-                    solution[gene_index] = np.random.choice([0, 1], p=[1 - inclusion_prob, inclusion_prob])
-
-                num_LMs = np.sum(solution)
-                if num_LMs >= 2:
-                    population[i] = solution
-                    i += 1
-
-            print("Initial population with weighted inclusion is complete")
-            return population
-
-        # Create an initial population composed of random chromosomes and seeds created from single-objective heuristics
-        def created_seeded_population(population_size, num_genes):
-            #num_seeds = 1
-            # Create the initial population, then randomly choose chromosomes to replace with seeds
-            initial_population = np.random.choice([0, 1], size=(population_size, num_genes), p=[0.5, 0.5])
-
-            # Create chromosomes that are guaranteed to have optimal scores in single-objective problems
-            seeds = []
-            seed1 = np.zeros(num_genes, dtype=int)
-            for i in range(num_genes):
-                if matching_scores[i] == 1.0: seed1[i] = 1
-            seeds.append(seed1)
-
-            seed2 = np.zeros(num_genes, dtype=int)
-            for i in range(num_genes):
-                if lm_CTML_score[i] >= 3.25: seed2[i] = 1
-            seeds.append(seed2)
-
-            seed3 = np.zeros(num_genes, dtype=int)
-            for i in range(num_genes):
-                if LM_overall_preference_score[i] >= 0.75: seed3[i] = 1
-            seeds.append(seed3)
-
-            # Add seeds to the population at unique random locations
-            num_seeds_to_add = min(len(seeds), population_size)
-            available_indices = list(range(population_size))  # List of available indices
-            for seed in seeds[:num_seeds_to_add]:
-                if available_indices:  # check to make sure there are still open spots
-                    random_index = np.random.choice(available_indices)  # Choose from available indices
-                    initial_population[random_index] = seed
-                    available_indices.remove(random_index)  # Remove the used index
-
-            return initial_population
-
-
-        # Consider going to single objective and returning the average Rubric score inside the fitness function.
-
-        def fitness_func2(ga_instance, solution, solution_idx):
-            solution = np.round(solution).astype(int)  # Round and cast to int
-            included_indices = np.where(solution == 1)[0]
-            num_LMs = len(included_indices)
-
-            #Ensure a minimum of two Learning Materials
-            if num_LMs <= 2:
-                difficulty_matching_average = -1
-                CTML_average_normalized = -1
-                media_matching_average = -1
-                max_time_compliance = -1
-                min_time_compliance = -1
-                normalized_average_coherence = -1
-                normalized_MDIP = -1
-                normalized_segmenting = -1
-                normalized_average_balanced_cover = -1
-                average_cohesiveness = -1
-                return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
-                        min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting,
-                        normalized_average_balanced_cover, average_cohesiveness]
-
-            difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
-            difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
-
-            CTML_average = np.sum(solution*lm_CTML_score) / num_LMs
-            CTML_average_normalized = (CTML_average - 1) / (4.0 - 1.0)
-            CTML_average_normalized = max(0.0, min(1.0, CTML_average_normalized))
-
-            media_matching_average = np.sum(solution*LM_overall_preference_score) / num_LMs
-            media_matching_average = max(0.0, min(1.0, media_matching_average))
-
-            total_duration = np.sum(solution*lm_time_taken)
-            min_time_compliance = 0.0
-            max_time_compliance = 0.0
-
-            if min_time <= total_duration <= max_time:
-                min_time_compliance = 1.0
-                max_time_compliance = 1.0
-            elif total_duration < min_time:  # Now within rubric range but below min_time
-                min_time_compliance = 1.0 - (abs(min_time - total_duration) / abs(Rubric_min_time - min_time)) if Rubric_min_time != min_time else 0.0
-                max_time_compliance = 1 # Punish the solution for being below min_time
-            elif total_duration > max_time:  # Now within rubric range but above max_time
-                max_time_compliance = 0.25 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
-                min_time_compliance = 1 # Punish the solution for exceeding max_time
-
-            min_time_compliance = max(0.0, min(1.0, min_time_compliance))
-            max_time_compliance = max(0.0, min(1.0, max_time_compliance))
-
-            # Begin section which examines relationships between LMs and KNs
-            total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
-
-            average_balanced_cover = calculate_balanced_cover(solution, LM_KNs_Covered, KS_names, total_covering_goals)
-            if average_balanced_cover >= max_average_balanced_cover: normalized_average_balanced_cover = 0
-            else: normalized_average_balanced_cover = 1 - (average_balanced_cover / max_average_balanced_cover)
-
-            normalized_average_balanced_cover = max(0.0, min(1.0, normalized_average_balanced_cover))
-
-            average_coherence = (total_covering_non_goals / num_LMs)
-
-            if max_non_goals == 0:  # Handle the case where max_non_goals is 0
-                normalized_average_coherence = 1.0 if average_coherence == 0 else 0.0  # Perfect coherence if no non-goals
-            elif average_coherence > Rubric_max_coherence:
-                normalized_average_coherence = 0 # use if coherence exceeds the Rubrics standards.
-            else:
-                normalized_average_coherence = 1.0 - (average_coherence / Rubric_max_coherence)
-
-            normalized_average_coherence = max(0.0, min(1.0, normalized_average_coherence))
-
-            MDIP_average = total_covering_goals / len(KS_names)
-            normalized_MDIP = MDIP_average / Rubric_max_MDIP
-            normalized_MDIP = max(0.0, min(1.0, normalized_MDIP))
-
-            average_segmenting = (total_covering_non_goals + total_covering_goals) / num_LMs
-            normalized_segmenting = normalize_segmenting(average_segmenting, Rubric_max_segmenting, num_LMs)
-
-            average_cohesiveness = calculate_cohesiveness(solution, LM_database)
-
-
-
-            # Try reducing to three objectives to simplify problem
-            #objective 1 - LM fitness for the learner
-            objective1 = (difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness) / 4
-            #objective 2 - LM coverage of the KNs
-            objective2 = (normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_average_balanced_cover) / 4
-            #objective 3 - Honoring of learner time constraints
-            objective3 = 2 / ((0.5 / max_time_compliance) + (0.5 / min_time_compliance)) if max_time_compliance > 0 and min_time_compliance > 0 else 0
-
-            return [objective1, objective2, objective3]
-
-
-
         def fitness_func(ga_instance, solution, solution_idx):
             solution = np.round(solution).astype(int)  # Round and cast to int
             included_indices = np.where(solution == 1)[0]
@@ -1012,16 +618,6 @@ for student_profile_id in range(len(profile_database)):
 
             min_time_compliance = max(0.0, min(1.0, min_time_compliance))
             max_time_compliance = max(0.0, min(1.0, max_time_compliance))
-
-            # if min_time <= total_duration <= max_time:
-            #     min_time_compliance = 1.0
-            #     max_time_compliance = 1.0
-            # elif total_duration < min_time:
-            #     min_time_compliance = 1.0 - (abs(min_time - total_duration) / min_time)
-            #     max_time_compliance = min_time_compliance
-            # elif total_duration > max_time:  # Now within rubric range but above max_time
-            #     max_time_compliance = 0.25 - abs(max_time - total_duration) / abs(Rubric_max_time - max_time) if Rubric_max_time != max_time else 0.0
-            #     min_time_compliance = max_time_compliance
 
             # Begin section which examines relationships between LMs and KNs
             total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
@@ -1150,9 +746,6 @@ for student_profile_id in range(len(profile_database)):
             if not all(kn_coverage.values()):
                 set_cover = 1 # Not a valid set cover or time constraints violated
 
-            #normalized_score = (((difficulty_matching_average + CTML_average_normalized + media_matching_average +
-            #                    average_cohesiveness + normalized_segmenting + normalized_MDIP +
-            #                    normalized_average_coherence + normalized_average_balanced_cover + max_time_compliance + min_time_compliance) / 10)*3)+1
 
             LM_compliance_score = ((difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness) / 4) * 3 + 1
 
@@ -1160,17 +753,8 @@ for student_profile_id in range(len(profile_database)):
 
             time_compliance = ((min_time_compliance + max_time_compliance) / 2 ) * 3 + 1
 
-
-            #return [rubric_scores["Rubric Average"], normalized_score]
-            #return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance]
             return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance, set_cover]
 
-            #return [difficulty_matching_average, CTML_average_normalized, media_matching_average, max_time_compliance,
-            #        min_time_compliance, normalized_average_coherence, normalized_MDIP, normalized_segmenting, normalized_average_balanced_cover, average_cohesiveness]
-
-        # GA Parameters
-        # We need to add the requirement of a set cover to the genetic algorithm. All KNs in KS_names need to be covered by at least 1 LM for a solution to be valid
-        # This necessitates a change to the population
 
         gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
@@ -1194,15 +778,25 @@ for student_profile_id in range(len(profile_database)):
         # crossover_probability = [0.5]
         # num_parents_mating = [10]
 
-        # Second Exhaustive Search for random initial population
-        sol_per_pop = [50, 100, 150, 200, 250]
-        num_generations = [50, 100, 150, 200, 250]
+        # # Second Exhaustive Search for random initial population
+        # sol_per_pop = [50, 100, 150, 200, 250]
+        # num_generations = [50, 100, 150, 200, 250]
+        # parent_selection_type = ["nsga2"]
+        # mutation_type = ["swap"]
+        # crossover_type = ["two_points"]
+        # mutation_probability = [0.1, 0.3, 0.5]
+        # crossover_probability = [0.3]
+        # num_parents_mating = [25]
+
+        # quick run
+        sol_per_pop = [100]
+        num_generations = [100]
         parent_selection_type = ["nsga2"]
         mutation_type = ["swap"]
-        crossover_type = ["two_points"]
-        mutation_probability = [0.1, 0.3, 0.5]
-        crossover_probability = [0.3]
-        num_parents_mating = [25]
+        crossover_type = ["single_point"]
+        mutation_probability = [0.3]
+        crossover_probability = [0.5]
+        num_parents_mating = [10]
 
         parameter_combinations = list(itertools.product(
             sol_per_pop,
@@ -1228,25 +822,12 @@ for student_profile_id in range(len(profile_database)):
         num_genes = len(LM_database)
 
         # Define Rubric Parameters that will be used in the GA Fitness Function
-        # Rubric Parameters Rubric says max_time by 1.2 and min time by 0.8
-        #Rubric_max_time = math.ceil(max_time * 1.5)
         Rubric_max_time = math.ceil(max_time*1.2)
         Rubric_min_time = math.floor(min_time * 0.8)
         Rubric_max_coherence = 1.1
         max_average_balanced_cover = 5
         Rubric_max_MDIP = 4
         Rubric_max_segmenting = 5
-
-        # Use NGSA for multi-objective problems
-        #ga_instance = pygad.GA(num_generations=num_generations,
-        #                       num_parents_mating=num_parents_mating,
-        #                       sol_per_pop=sol_per_pop,
-        #                       num_genes=num_genes,
-        #                       gene_space=gene_space,
-        #                       fitness_func=fitness_func,
-        #                       parent_selection_type='nsga2')
-
-
 
 
         for combination in parameter_combinations:
@@ -1257,11 +838,11 @@ for student_profile_id in range(len(profile_database)):
                                    sol_per_pop=pop_size,
                                    num_genes=num_genes,
                                    gene_space=gene_space,
-                                   initial_population = generate_initial_population(pop_size, num_genes, 0.5),
-                                   # initial_population=generate_valid_initial_population(pop_size, num_genes,
-                                   #                                                      KS_names, LM_KNs_Covered,
-                                   #                                                      lm_time_taken, Rubric_min_time,
-                                   #                                                      Rubric_max_time, 1000),
+                                   #initial_population = generate_initial_population(pop_size, num_genes, 0.5),
+                                   initial_population=generate_valid_initial_population(pop_size, num_genes,
+                                                                                        KS_names, LM_KNs_Covered,
+                                                                                        lm_time_taken, Rubric_min_time,
+                                                                                        Rubric_max_time, 1000),
                                    fitness_func=fitness_func,
                                    parent_selection_type=parent_type,
                                    mutation_type=mut_type,
@@ -1285,13 +866,10 @@ for student_profile_id in range(len(profile_database)):
             solution, solution_fitness, solution_idx = ga_instance.best_solution(ga_instance.last_generation_fitness)
 
             solution = np.round(solution).astype(int)  # Round and cast to int
-            #print(f"Fitness of best solution: {solution_fitness}")  # Print the fitness value
             num_LMs = np.sum(solution)
 
             # Check pareto front for best solution according to rubric
             pareto_front = ga_instance.pareto_fronts
-            #print("The length of the pareto front is: ", len(pareto_fronts))
-
             highest_fitness_value = -1  # Access the first element of the fitness array
             best_chromosome_index = -1
             LM_compliance_average = 0
@@ -1314,7 +892,6 @@ for student_profile_id in range(len(profile_database)):
 
             solution = ga_instance.population[best_chromosome_index]
             solution = np.round(solution).astype(int)  # Round and cast to int
-
 
             total_difficulty_score = 0
             total_media_score = 0
@@ -1347,10 +924,7 @@ for student_profile_id in range(len(profile_database)):
                         if kn in LM_KNs_Covered[i]: num_coverings += 1
                 balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
             balanced_average = balanced_cover_total / len(KS_names)
-            #print("Average Balanced Cover is: ", balanced_average)
-            # End Balanced Cover Section
 
-            # Calculate average matching score
             average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
             average_media_preference_score = total_media_score / count if count > 0 else 0
             average_CTML_score = total_CTML_score / count if count > 0 else 0
@@ -1488,432 +1062,17 @@ for student_profile_id in range(len(profile_database)):
 
             rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
 
-            #print("Rubric average is:", rubric_scores["Rubric Average"])
-
-            # if (rubric_scores["Rubric Average"]) >= best_score:
-            #     best_score = rubric_scores["Rubric Average"]
-            #     best_solution = candidate_solution
-            #     best_raw_data = raw_data
-            #     best_rubric_scores = rubric_scores
-            #
             print("Best score for student: ", student_profile_id, " is ",  rubric_scores["Rubric Average"])
             combined_data = {**raw_data, **rubric_scores}
             combined_data_df = pd.DataFrame(combined_data, index=[0])
             experiment_df = pd.concat([experiment_df, combined_data_df], ignore_index=True)
 
 
-    #print("Best Solution is:", best_solution)
-    #print("The scores of the best solution is:")
-    #for name, score in best_rubric_scores.items():
-    #    print(f"Rubric {name}: {score}")
-
-
-    run_test = False
-
-    if run_test:
-        personalized_learning_path = solution
-
-        # In run coherence test we only include LMs that exclusively cover student goal nodes.
-
-        # Note, we need to check all KNs to make sure that data is consistent.
-        run_coherence_test = False
-        if run_coherence_test:
-            # Select LMs that only cover goal KNs
-            for i in range(num_LMs):
-                # print(f"Checking LM_KNs_Covered[{i}]: {LM_KNs_Covered[i]}")
-                if any(kn in KS_names for kn in LM_KNs_Covered[i]):
-                    # print(LM_KNs_Covered[i])
-                    personalized_learning_path[i] = 1
-                else:
-                    personalized_learning_path[i] = 0
-
-        # Initialize variables
-        total_difficulty_score = 0
-        # total_media_score is the average of LM_media_match and flipped_preference_score
-        total_LM_media_match = 0
-        total_flipped_preference_score = 0
-        total_media_score = 0
-        total_CTML_score = 0
-        total_time = 0
-        count = 0
-        total_covering_non_goals = 0
-        total_covering_goals = 0
-
-        # Convert KS to a list of strings based on KNs
-        # LM_KNs_Covered - a list of lists of the Knowledge Nodes covered by each Learning Material
-        # Goal - iterate through all LMs and add up the number of coverings of KNs performed by LMs that are not goal nodes.
-
-        # Iterate through the candidate learning path and match scores
-        for i in range(len(personalized_learning_path)):
-            if personalized_learning_path[i] == 1:
-                # Add up the number of non-goal KNs covered by learning material
-                for kn in LM_KNs_Covered[i]:
-                    if kn not in KS_names:
-                        total_covering_non_goals += 1
-                    else:
-                        total_covering_goals += 1
-                total_media_score += LM_overall_preference_score[i]
-                total_LM_media_match += LM_media_match[i]
-                total_flipped_preference_score += flipped_preference_score[i]
-                total_difficulty_score += matching_scores[i]
-                total_CTML_score += lm_CTML_score[i]
-                total_time += lm_time_taken[i]
-                count += 1
-
-        # Begin Balanced Cover Section
-        # number of goal Knowledge Nodes in KS
-        # print("Total number of non-goal coverings", total_covering_non_goals)
-        # print("Total number of goal coverings", total_covering_goals)
-        # print("Number of goal KNs", len(KS_names))
-
-        balanced_cover_total = 0
-
-        for kn in KS_names:
-            num_coverings = 0
-            for i in range(len(personalized_learning_path)):
-                if personalized_learning_path[i] == 1:
-                    if kn in LM_KNs_Covered[i]: num_coverings += 1
-            balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
-        balanced_average = balanced_cover_total / len(KS_names)
-        print("Average Balanced Cover is: ", balanced_average)
-        # End Balanced Cover Section
-
-        if total_time > max_time:
-            print("PLP exceeds max time by", ((total_time - max_time) / max_time) * 100, "percent")
-        elif total_time < min_time:
-            print("PLP is less than min time by", ((min_time - total_time) / min_time) * 100, "percent")
-        else:
-            print("PLP is within the student time constraints.")
-
-        # Calculate average matching score
-        average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
-        average_media_preference_score = total_media_score / count if count > 0 else 0
-        average_CTML_score = total_CTML_score / count if count > 0 else 0
-        average_LM_media_match = total_LM_media_match / count if count > 0 else 0
-        average_preference = total_flipped_preference_score / count if count > 0 else 0
-        average_coherence = total_covering_non_goals / count if count > 0 else 0
-        multiple_document_principle_average = total_covering_goals / len(KS_names)
-        average_segmenting_principle = (total_covering_non_goals + total_covering_goals) / count if count > 0 else 0
-
-        #print("The number of LMs is:", num_LMs)
-        # calculate the average cohesiveness of the PLP
-        # Filter the embeddings of included learning materials
-        included_embeddings = [LM_database['embeddings'][i] for i in range(len(LM_database)) if
-                               personalized_learning_path[i] == 1]
-
-        num_included_LMs = len(included_embeddings)
-        total_similarity = 0
-        count = 0
-
-        for i in range(num_included_LMs):
-            for j in range(i + 1, num_included_LMs):
-                similarity_score = util.pytorch_cos_sim(included_embeddings[i], included_embeddings[j]).item()
-                normalized_similarity = (similarity_score + 1) / 2  # Normalize similarity score
-                total_similarity += normalized_similarity
-                count += 1
-
-        average_cohesiveness = total_similarity / count if count > 0 else 0
-
-        # End section to calculate cohesiveness
-
-        # Print the personalized learning path and the average matching score
-        print("Personalized Learning Path:", personalized_learning_path)
-        print("Total number of LMs is:", num_included_LMs)
-        print("Average Difficulty Matching Score:", average_difficulty_matching_score)
-        print("Average Overall Media Matching Score", average_media_preference_score)
-        print("Average CTML Score", average_CTML_score)
-        print("Average Cohesiveness:", average_cohesiveness)
-        print("Total Time Taken", total_time)
-        print("Average Coherence", average_coherence)
-        print("Average Segmenting", average_segmenting_principle)
-        print("Multiple Document Integration Score", multiple_document_principle_average)
-
-        rubric_scores = {
-            "LM_Difficulty_Matching": 1,
-            "CTML_Principle": 1,
-            "media_matching": 1,
-            "time_interval_score": 1,
-            "coherence_principle": 1,
-            "segmenting_principle": 1,
-            "balance": 1,
-            "cohesiveness": 1,
-            "MDIP": 1,
-            "Rubric Average": 1
-        }
-
-        if average_difficulty_matching_score >= 0.75: rubric_scores["LM_Difficulty_Matching"] = 4
-        elif average_difficulty_matching_score >= 0.5: rubric_scores["LM_Difficulty_Matching"] = 3
-        elif average_difficulty_matching_score >= 0.25: rubric_scores["LM_Difficulty_Matching"] = 2
-
-        if average_CTML_score >= 3.25: rubric_scores["CTML_Principle"] = 4
-        elif average_CTML_score >= 2.5: rubric_scores["CTML_Principle"] = 3
-        elif average_CTML_score >= 1.75: rubric_scores["CTML_Principle"] = 2
-
-        if average_media_preference_score >= 0.75: rubric_scores["media_matching"] = 4
-        elif average_media_preference_score >= 0.5: rubric_scores["media_matching"] = 3
-        elif average_media_preference_score >= 0.25: rubric_scores["media_matching"] = 2
-
-        if min_time < total_time < max_time: rubric_scores["time_interval_score"] = 4
-        else:
-            if total_time < min_time:
-                if 0 < abs(total_time - min_time) / min_time <= 0.1: rubric_scores["time_interval_score"] = 3
-                elif 0.1 < abs(total_time - min_time) / min_time <= 0.2: rubric_scores["time_interval_score"] = 2
-            if total_time > max_time:
-                if 0 < abs(total_time - max_time) / max_time <= 0.1: rubric_scores["time_interval_score"] = 3
-                elif 0.1 < abs(total_time - max_time) / max_time <= 0.2: rubric_scores["time_interval_score"] = 2
-
-        if average_coherence <= 0.25: rubric_scores["coherence_principle"] = 4
-        elif average_coherence <= 0.5: rubric_scores["coherence_principle"]  = 3
-        elif average_coherence <= 1.0: rubric_scores["coherence_principle"]  = 2
-
-        if average_segmenting_principle <= 2: rubric_scores["segmenting_principle"]  = 4
-        elif average_segmenting_principle <= 3: rubric_scores["segmenting_principle"]  = 3
-        elif average_segmenting_principle <= 4: rubric_scores["segmenting_principle"]  = 2
-
-        if average_cohesiveness >= 0.75: rubric_scores["cohesiveness"]  = 4
-        elif average_cohesiveness >= 0.5: rubric_scores["cohesiveness"] = 3
-        elif average_cohesiveness >= 0.25: rubric_scores["cohesiveness"] = 2
-
-        if balanced_average <= 1: rubric_scores["balance"] = 4
-        elif balanced_average <= 2.9: rubric_scores["balance"] = 3
-        elif balanced_average <= 4.9: rubric_scores["balance"] = 2
-
-        if multiple_document_principle_average >= 4: rubric_scores["MDIP"] = 4
-        elif multiple_document_principle_average >= 3: rubric_scores["MDIP"]  = 3
-        elif multiple_document_principle_average >= 2: rubric_scores["MDIP"]  = 2
-
-        rubric_scores["Rubric Average"] = sum(rubric_scores.values()) / (len(rubric_scores) - 1)
-
-        # Optional: Print individual rubric scores
-        for name, score in rubric_scores.items():
-            print(f"Rubric {name}: {score}")
-
-        data = {
-            "Student_id": int(student_profile_id),
-            "Personalized Learning Path": str(personalized_learning_path),
-            "Total number of LMs": num_included_LMs,
-            "Difficulty Average": average_difficulty_matching_score,
-            "Media Matching Average": average_media_preference_score,
-            "CTML Average": average_CTML_score,
-            "Cohesiveness Average": average_cohesiveness,
-            "Balance Average": balanced_average,
-            "PLP Duration": total_time,
-            "Coherence Average": average_coherence,
-            "Segmenting Average": average_segmenting_principle,
-            "MDIP Average": multiple_document_principle_average
-        }
-
-        data = pd.DataFrame(data, index=[0])
-        experiment_df = pd.concat([experiment_df, data], ignore_index=True)
-        Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/GA_Results.csv"
-        experiment_df.to_csv(Experiment)
-
-Experiment = "/home/sean/Desktop/PhD_Work/PhD_Work/Rubric_project/Experiment_Results/GA_Results.csv"
+Experiment = "Experiment_Results/Experiment.csv"
 experiment_df.to_csv(Experiment)
 print("Finished Test")
-### End Test ###########################
-
-        #
-
-        # # Use rubric to convert to integer scores
-        # LM_Difficulty_Matching = 1
-        # CTML_Principle = 1
-        # media_matching = 1
-        # time_interval_score = 1
-        #
-        # if difficulty_matching_average >= 0.75: LM_Difficulty_Matching = 4
-        # elif difficulty_matching_average >= 0.5: LM_Difficulty_Matching = 3
-        # elif difficulty_matching_average >= 0.25: LM_Difficulty_Matching = 2
-        #
-        # if CTML_average >= 3.25: CTML_Principle = 4
-        # elif CTML_average >= 2.5: CTML_Principle = 3
-        # elif CTML_average >= 1.75: CTML_Principle = 2
-        #
-        # if media_matching_average >= 0.75: media_matching = 4
-        # elif media_matching_average >= 0.5: media_matching = 3
-        # elif media_matching_average >= 0.25: media_matching = 2
-
-        # coherence_principle = 1
-        # if average_coherence <= 0.25: coherence_principle = 4
-        # elif average_coherence <= 0.5: coherence_principle = 3
-        # elif average_coherence <= 1.0: coherence_principle = 2
-
-        # segmenting_principle = 1
-        # if average_segmenting_principle <= 2: segmenting_principle = 4
-        # elif average_segmenting_principle <= 3: segmenting_principle = 3
-        # elif average_segmenting_principle <= 4: segmenting_principle = 2
-
-        #if min_time < total_duration < max_time: time_interval_score = 1.0
-        #elif total_duration < min_time:
-        #    time_interval_score = total_duration - min_time
-        #else: time_interval_score = max_time - total_duration
-        #else: time_interval_score = -abs(total_duration - (min_time + max_time) / 2)  # Negative absolute difference from midpoint
-
-        # if min_time < total_duration < max_time: time_interval_score = 4
-        # else:
-        #     if total_duration < min_time:
-        #         if 0 < abs(total_duration - min_time) / min_time <= 0.1: time_interval_score = 3
-        #         elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2: time_interval_score = 2
-        #         else: time_interval_score = 1
-        #     if total_duration > max_time:
-        #         if 0 < abs(total_duration - max_time) / max_time <= 0.1: time_interval_score = 3
-        #         elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2: time_interval_score = 2
-        #         else: time_interval_score = 1
-    # Example lookup
-    #KN = 'Speech Processing'
-    #cog_level = KN_cog_level_dict.get(KN, "KN not found")
-    #print(f"Cognitive level for {KN}: {cog_level}")
 
 
-    #print(LM_difficulty_int)
-    # Print the students goal nodes.
-    #for node in KS:
-    #    print(KG.vs[node]['name'])
-
-
-
-    # Visualize the Graph
-    #layout = KG.layout_fruchterman_reingold(grid="nogrid")
-    #fig, ax = plt.subplots()
-
-    # Adjust font size and color for better readability
-    #ig.plot(KG, target=ax, layout=layout, vertex_size=12,
-    #        vertex_label=KG.vs['name'], edge_curved=True,
-    #        vertex_label_size=5, vertex_label_color='black')  # Set label color to black
-
-    #plt.show()
-    #plt.close()
-
-
-
-
-
-
-# Compute cosine distance matrix
-#distance_matrix = cosine_distances(embeddings)
-
-#k_high = 80
-
-#silhouette_scores = []
-#for num_clusters in range(2, k_high):
-#    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-#    cluster_labels = kmeans.fit_predict(distance_matrix)
-#    silhouette_avg = silhouette_score(distance_matrix, cluster_labels)
-#    silhouette_scores.append(silhouette_avg)
-
-# Plot the Silhouette Scores
-#plt.figure(figsize=(10, 6))
-#plt.plot(range(2, k_high), silhouette_scores, marker='o')
-#plt.xlabel('Number of Clusters')
-#plt.ylabel('Silhouette Score')
-#plt.title('Silhouette Score for Optimal Number of Clusters')
-#plt.grid(True)
-#plt.show()
-#plt.savefig('Cohesiveness_Silhoutte.png', dpi=300)
-# Apply K-Means Clustering
-#num_clusters = 5  # You can adjust the number of clusters
-#kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-#cluster_labels = kmeans.fit_predict(distance_matrix)
-
-# Assign cluster labels to the DataFrame
-#LM_database['cluster'] = cluster_labels
-
-# Print the cluster assignments
-#print(LM_database[['Description', 'cluster']])
-
-
-# Initialize the minimum similarity value and the pair of least similar descriptions
-#min_value = float('inf')
-#max_value = -1
-#least_similar_pair = (None, None)
-#most_similar_pair = (None, None)
-#similarity_threshold = 0.5
-#above_threshold_pairs = []
-#below_threshold_count = 0
-
-
-#num_descriptions = len(LM_database['Description'])
-#running_tally = 0
-
-# Calculate similarities
-#for i in range(num_descriptions):
-#    for j in range(i + 1, num_descriptions):
-#        running_tally += 1
-#        embedding1 = LM_database['embeddings'][i]
-#        embedding2 = LM_database['embeddings'][j]
-#        similarity_score = util.pytorch_cos_sim(embedding1, embedding2).item()
-        # Cosine similarity is in the range [-1,1], we want to normalize it to [0,1]
-        # Therefore add 1 and divide by 2
-        # This has the impact that a score of 1 is completely similar, a score of 0.5 is unrelated (orthogonal), and a score of 0 means completely opposite
-#        similarity_score = (similarity_score + 1)/2
-
-#        if similarity_score < similarity_threshold:
-#            above_threshold_pairs.append((LM_database['Description'][i],
-#                                          LM_database['Description'][j],
-#                                          similarity_score))
-
-#        if similarity_score < min_value:
-#            min_value = similarity_score
-#            least_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
-
-#        if similarity_score > max_value:
-#            max_value = similarity_score
-#            most_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
-
-
-#        if similarity_score < similarity_threshold:
-#            below_threshold_count += 1
-
-#print(f"Least similar texts have a similarity score of {min_value:.2f}")
-#print("Text 1:", least_similar_pair[0])
-#print("Text 2:", least_similar_pair[1])
-#print(f"Most similar texts have a similarity score of {max_value:.2f}")
-#print("Text 1:", most_similar_pair[0])
-#print("Text 2:", most_similar_pair[1])
-#print(f"Total number of pairs: {running_tally}")
-#print(f"Number of pairs with similarity score below {similarity_threshold}: {below_threshold_count}")
-
-# Print results
-#print(f"Pairs with similarity score above {similarity_threshold}:")
-#for pair in above_threshold_pairs:
-#    print(f"Text 1: {pair[0]}")
-#    print(f"Text 2: {pair[1]}")
-#    print(f"Similarity Score: {pair[2]:.2f}")
-#    print("-" * 20)
-
-# Convert all descriptions to Doc objects and store vectors
-#LM_database['nlp_desc'] = LM_database['Description'].apply(nlp)
-
-#min_value = float('inf')
-#least_similar_pair = (None, None)
-#num_descriptions = LM_database.shape[0]
-#similarity_threshold = 0.75
-#below_threshold_count=0
-#running_tally = 0
-# Calculate similarities
-#for i in range(num_descriptions):
-#    for j in range(i + 1, num_descriptions):
-#        running_tally += 1
-#        text1 = LM_database['nlp_desc'][i]
-#        text2 = LM_database['nlp_desc'][j]
-#        value = text1.similarity(text2)
-
-#        if value < min_value:
-#            min_value = value
-#            least_similar_pair = (LM_database['Description'][i], LM_database['Description'][j])
-
-#        if value < similarity_threshold:
-#            below_threshold_count += 1
-
-#print(f"Least similar texts have similarity score of {min_value:.2f}")
-#print("Text 1:", least_similar_pair[0])
-#print("Text 2:", least_similar_pair[1])
-#print(f"Total number of pairs: {running_tally}")
-#print(f"Number of pairs with similarity score below {similarity_threshold}: {below_threshold_count}")
-
-# In this section we determine the CTML score of each LM. This score does not depend on individual learners so we can accomplish this task before loading the learner profile
-
-# Capture the LM parameters based on the Cognitive Theory of Multimedia Learning
 
 
 
