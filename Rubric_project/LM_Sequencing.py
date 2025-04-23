@@ -11,7 +11,8 @@ import time
 knowledge_nodes = "Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "Data/Knowledge_Graph_Edges.txt"
 learning_materials = "Data/Learning_Materials_Base_set.xlsx"
-LM_selection_solutions = "Data/best_initial_population_solution.csv"
+#LM_selection_solutions = "Data/best_initial_population_solution.csv"
+LM_selection_solutions = "Experiment_Results/LM_Selection_30_iterations.csv"
 
 # Identify the names of the knowledge nodes
 with open(knowledge_nodes, 'r') as file:
@@ -39,10 +40,16 @@ solution_database['Personalized Learning Path'] = solution_database['Personalize
 experiment_df = pd.DataFrame()
 
 #Solve problem for each student
-for student_id in solution_database["Student_id"]:
+#for student_id in solution_database["Student_id"]:
+for row in solution_database.itertuples(index = False):
+    student_id = row.Student_id
+    personalized_learning_path = row._12
     print("Student number:", student_id)
-    student_solution = solution_database[solution_database["Student_id"] == student_id]
-    personalized_learning_path = student_solution["Personalized Learning Path"].iloc[0]
+    # student_solution = solution_database[solution_database["Student_id"] == student_id]
+    # personalized_learning_path = student_solution["Personalized Learning Path"].iloc[0]
+    #print(f"Student number: {student_id}")
+    #print("Personalized Learning Path:", personalized_learning_path)
+
     mask = personalized_learning_path == 1
     filtered_lm_database = LM_database[mask]
     #print(filtered_lm_database)
@@ -495,19 +502,21 @@ for student_id in solution_database["Student_id"]:
     #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
     weights = [0.33333, 0.33333, 0.33333]
 
-    num_iterations = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
-    initial_temperature = [200, 150, 100]
-    cooling_rate = [0.999, 0.99, 0.95]
+    #num_iterations = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+    #num_iterations = [8000]
+    num_iterations = 8000
+    # initial_temperature = [200, 150, 100]
+    # cooling_rate = [0.999, 0.99, 0.95]
 
     # num_iterations = [1000, 2000]
     # initial_temperature = [200, 100]
     # cooling_rate = [0.99, 0.95]
 
-    parameter_combinations = list(itertools.product(
-        num_iterations,
-        initial_temperature,
-        cooling_rate
-    ))
+    # parameter_combinations = list(itertools.product(
+    #     num_iterations,
+    #     initial_temperature,
+    #     cooling_rate
+    # ))
 
     # Run experiment
 
@@ -517,13 +526,16 @@ for student_id in solution_database["Student_id"]:
     #lm_sequence_indices = greedy_prerequisite_sequencing(n, difficulty_table, prerequisite_table)
 
     #for iterations in num_iterations:
-    for combination in parameter_combinations:
-        num_iterations, initial_temperature, cooling_rate = combination
+    iterations = 1
+
+    #for combination in parameter_combinations:
+    for _ in range(iterations):
+        #num_iterations, initial_temperature, cooling_rate = combination
 
         lm_sequence_indices = generate_random_permutation(n)
         start_time = time.time()
-        #lm_sequence_indices = random_search(lm_sequence_indices, fitness_function, iterations)
-        lm_sequence_indices = simulated_annealing(lm_sequence_indices, fitness_function, initial_temperature, cooling_rate, num_iterations)
+        lm_sequence_indices = random_search(lm_sequence_indices, fitness_function, num_iterations)
+        #lm_sequence_indices = simulated_annealing(lm_sequence_indices, fitness_function, initial_temperature, cooling_rate, num_iterations)
         #lm_sequence_indices = generate_difficulty_sorted_permutation(n, LM_difficulty_list)
         end_time = time.time()
 
@@ -560,8 +572,8 @@ for student_id in solution_database["Student_id"]:
 
         print("Score of solved solution:")
         print("Number of iterations is: ", num_iterations)
-        print("Cooling Rate is:", cooling_rate)
-        print("Initial Temperature is:", initial_temperature)
+        #print("Cooling Rate is:", cooling_rate)
+        #print("Initial Temperature is:", initial_temperature)
         print("Number of LMs is:", len(lm_sequence_indices))
         print("difficulty", difficulty_score)
         print("difficulty max", difficulty_max)
@@ -582,8 +594,8 @@ for student_id in solution_database["Student_id"]:
         data = {
             "Student_id": int(student_id),
             "Number Iterations": num_iterations,
-            "Cooling Rate": cooling_rate,
-            "Initial Temperature": initial_temperature,
+            #"Cooling Rate": cooling_rate,
+            #"Initial Temperature": initial_temperature,
             "Personalized Learning Path": str(personalized_learning_path),
             "Number LMs": len(lm_sequence_indices),
             "Many-to-Many": many_to_many,
@@ -600,6 +612,7 @@ for student_id in solution_database["Student_id"]:
             "Difficulty Rubric Score": difficulty_rubric_score,
             "Prerequisite Rubric Score": prerequisite_rubric_score,
             "Interleaving Rubric Score": interleaving_rubric_score,
+            "Average Rubric Score": (difficulty_rubric_score + prerequisite_rubric_score + interleaving_rubric_score) / 3,
             "Combined": combined_score,
             "Algorithm time": elapsed_time
         }
@@ -608,9 +621,9 @@ for student_id in solution_database["Student_id"]:
         experiment_df = pd.concat([experiment_df, data], ignore_index=True)
 
 
-Experiment = "Experiment_Results/Experiment.csv"
+Experiment = "Experiment_Results/Sequencing_multiple_trials.csv"
 experiment_df.to_csv(Experiment)
-    #lm_sequence_indices = generate_prerequisite_sorted_permutation(n, prerequisite_table)
+
 
 
 
