@@ -1,0 +1,2 @@
+Student_id,Unique_Solution_ID,LM_Difficulty_Matching,CTML_Principle,media_matching,time_interval_score,coherence_principle,segmenting_principle,balance,cohesiveness,MDIP,Rubric Average,Unique_PLP_Count,Total_Iterations_Appears,Times_Top_Scoring,Iterations_Appeared_In
+7,0,2,3,3,1,2,4,3,3,4,2.888888888888889,137,30,392,"[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]"

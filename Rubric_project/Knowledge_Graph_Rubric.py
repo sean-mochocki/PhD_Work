@@ -144,6 +144,7 @@ for _ in range(num_iterations):
     for student_profile_id in range(len(profile_database)):
         print("Student profile is: ", student_profile_id )
 
+        #student_profile_id = 11 #Testing only
         goal_nodes = profile_database['goals'][student_profile_id]
 
         # The Knowledge graph is derived from a taxonomy, so it has the property that there is only one path from each KN to
@@ -755,11 +756,18 @@ for _ in range(num_iterations):
 
                 LM_compliance_score = ((difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness) / 4) * 3 + 1
 
-                KN_compliance_score = ((normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_average_balanced_cover) / 4) * 3 + 1
+                #KN_compliance_score = ((normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_average_balanced_cover) / 4) * 3 + 1
 
                 time_compliance = ((min_time_compliance + max_time_compliance) / 2 ) * 3 + 1
 
-                return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance, set_cover]
+                #Experiment with MDIP as a separate objective
+                KN_compliance_score = ((normalized_segmenting + normalized_average_coherence + normalized_average_balanced_cover) / 3) * 3 + 1
+                mdip_compliance = (normalized_MDIP * 3 )+ 1
+
+                #eturn [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance, set_cover]
+
+
+                return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance, mdip_compliance]
 
 
             gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
@@ -899,7 +907,8 @@ for _ in range(num_iterations):
                     LM_compliance_average = row_data[1][1]
                     KN_compliance_average = row_data[1][2]
                     Time_interval_compliance = row_data[1][3]
-                    set_cover = row_data[1][4]
+                    #set_cover = row_data[1][4]
+                    mdip = row_data[1][4]
 
                     #print("Fitness value of best solution from pareto front is:", highest_fitness_value)
 
@@ -981,7 +990,8 @@ for _ in range(num_iterations):
                         "LM Compliance": LM_compliance_average,
                         "KN Compliance": KN_compliance_average,
                         "Time Interval Compliance": Time_interval_compliance,
-                        "Set Cover Compliance": set_cover,
+                        #"Set Cover Compliance": set_cover, reset this to restore state
+                        "MDIP Compliance": mdip,
                         "Difficulty Average": average_difficulty_matching_score,
                         "Media Matching Average": average_media_preference_score,
                         "CTML Average": average_CTML_score,
@@ -1084,7 +1094,7 @@ for _ in range(num_iterations):
                     experiment_df = pd.concat([experiment_df, combined_data_df], ignore_index=True)
 
 
-Experiment = "Experiment_Results/LM_Selection_30_iterations.csv"
+Experiment = "Experiment_Results/LM_Selection_30_iterations_with_MDIP.csv"
 experiment_df.to_csv(Experiment)
 print("Finished Test")
 

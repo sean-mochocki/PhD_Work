@@ -12,8 +12,8 @@ knowledge_nodes = "Data/Knowledge_Nodes.txt"
 knowledge_graph_edges = "Data/Knowledge_Graph_Edges.txt"
 learning_materials = "Data/Learning_Materials_Base_set.xlsx"
 #LM_selection_solutions = "Data/best_initial_population_solution.csv"
-LM_selection_solutions = "Experiment_Results/LM_Selection_30_iterations.csv"
-
+#LM_selection_solutions = "Experiment_Results/LM_Selection_30_iterations.csv"
+LM_selection_solutions = "Experiment_Results/graphic.csv"
 # Identify the names of the knowledge nodes
 with open(knowledge_nodes, 'r') as file:
     # Read the lines into a list
@@ -38,7 +38,7 @@ solution_database['Personalized Learning Path'] = solution_database['Personalize
 #print(solution_database['Personalized Learning Path'])
 
 experiment_df = pd.DataFrame()
-
+Student_PLP = pd.DataFrame()
 #Solve problem for each student
 #for student_id in solution_database["Student_id"]:
 for row in solution_database.itertuples(index = False):
@@ -52,8 +52,8 @@ for row in solution_database.itertuples(index = False):
 
     mask = personalized_learning_path == 1
     filtered_lm_database = LM_database[mask]
-    #print(filtered_lm_database)
-
+    Student_PLP = pd.concat([Student_PLP, filtered_lm_database], ignore_index=True)
+    print(filtered_lm_database)
     # Define the LM difficulty and difficulty matching values for the learner
     def difficulty_to_int(difficulty):
         """
@@ -621,8 +621,11 @@ for row in solution_database.itertuples(index = False):
         experiment_df = pd.concat([experiment_df, data], ignore_index=True)
 
 
-Experiment = "Experiment_Results/Sequencing_multiple_trials.csv"
-experiment_df.to_csv(Experiment)
+Experiment = "Experiment_Results/graphics_sequencing_score.csv"
+#experiment_df.to_csv(Experiment)
+
+PLP = "Experiment_Results/Student_PLPs.csv"
+#Student_PLP.to_csv(PLP)
 
 
 
