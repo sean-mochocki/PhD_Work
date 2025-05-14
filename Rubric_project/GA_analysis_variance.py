@@ -4,7 +4,7 @@ import re
 import math
 import plotly.express as px
 
-plp_solutions = "Experiment_Results/LM_Selection_30_iterations_pareto_front.csv"
+plp_solutions = "Experiment_Results/LM_Selection_RSD_first_look.csv"
 #plp_solutions = "Experiment_Results/LM_Selection_30_iterations_with_MDIP.csv"
 report = pd.DataFrame()
 
@@ -98,7 +98,7 @@ for id in range(0, id_max+1):
     report = pd.concat([report, final_csv_data])
 
 # Save the final data to a CSV file
-output_csv_file = "Experiment_Results/unique_top_scoring_solutions_report_MDIP.csv"
+output_csv_file = "Experiment_Results/unique_top_scoring_solutions_report_1_iteration.csv"
 report.to_csv(output_csv_file, index=False)
 
 #print(f"\n--- Final Report Saved to: {output_csv_file} ---")

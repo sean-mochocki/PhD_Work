@@ -138,7 +138,7 @@ profile_database = pd.read_excel(learner_profile)
 profile_database['goals'] = profile_database['goals'].apply(lambda x: ast.literal_eval(x) if x != '[]' else [])
 
 experiment_df = pd.DataFrame()
-num_iterations = 30
+num_iterations = 1
 for _ in range(num_iterations):
     print("Iteration number: ", _, "of", num_iterations)
     for student_profile_id in range(len(profile_database)):
@@ -365,6 +365,26 @@ for _ in range(num_iterations):
             average_balanced_cover = balanced_cover_total / num_kn
             return average_balanced_cover
 
+        def calculate_balanced_cover_relative_standard_deviation(personalized_learning_path, LM_KNs_Covered, KS_names, total_covering_goals):
+            """Calculates balanced cover using NumPy for efficiency."""
+            personalized_learning_path = np.array(personalized_learning_path)  # Convert to NumPy array
+            KS_names = np.array(KS_names)  # Convert to NumPy array
+            num_kn = len(KS_names)
+            covering_counts = np.zeros(num_kn)
+            # Efficiently count coverings using boolean indexing and summing
+            active_path_indices = np.where(personalized_learning_path == 1)[0]
+            #covering_counts is an array composed of integers that represent how many LMs cover each KN in KS
+            covering_counts = np.sum(covered_matrix[active_path_indices], axis=0)
+
+            # Calculate balanced cover using NumPy's vectorized operations
+            average_cover = total_covering_goals / num_kn
+            balanced_RSD = (np.sqrt(np.sum(np.square(covering_counts - average_cover)) / num_kn)) / average_cover
+
+            #balanced_cover_total = np.sum(np.abs(covering_counts - ideal_cover))
+
+            #average_balanced_cover = balanced_cover_total / num_kn
+            return balanced_RSD
+
         # Calculate the matching scores for all LMs
         matching_scores = calculate_matching_scores(LM_difficulty_int, LM_KNs_Covered, KN_cog_level_dict)
 
@@ -519,10 +539,13 @@ for _ in range(num_iterations):
                             if uncovered_kn:  # if set cover failed.
                                 continue  # try again.
 
+#*****************************************************************************************
+                            # Consider deleting this code and just going with set cover
                             # Fill remaining LMs randomly
-                            for i in range(num_genes):
-                                if chromosome[i] == 0:
-                                    chromosome[i] = random.choice([0, 1])
+                            # for i in range(num_genes):
+                            #     if chromosome[i] == 0:
+                            #         chromosome[i] = random.choice([0, 1])
+#*****************************************************************************************
 
                             population[valid_count] = chromosome
                             valid_count += 1
@@ -590,7 +613,7 @@ for _ in range(num_iterations):
 
                 # Check for no LMs
                 if num_LMs < 2:
-                    return [1, 1, 1, 1, 1]
+                    return [1, 1, 1]
 
                 difficulty_matching_average = np.sum(solution*matching_scores) / num_LMs
                 difficulty_matching_average = max(0.0, min(1.0, difficulty_matching_average))
@@ -629,11 +652,18 @@ for _ in range(num_iterations):
                 # Begin section which examines relationships between LMs and KNs
                 total_covering_goals, total_covering_non_goals = calculate_kn_coverage(solution, LM_KNs_Covered, KS_names)
 
-                average_balanced_cover = calculate_balanced_cover(solution, LM_KNs_Covered, KS_names, total_covering_goals)
-                if average_balanced_cover >= max_average_balanced_cover: normalized_average_balanced_cover = 0
-                else: normalized_average_balanced_cover = 1 - (average_balanced_cover / max_average_balanced_cover)
 
-                normalized_average_balanced_cover = max(0.0, min(1.0, normalized_average_balanced_cover))
+                RSD_balanced_cover = calculate_balanced_cover_relative_standard_deviation(solution, LM_KNs_Covered, KS_names, total_covering_goals)
+                if RSD_balanced_cover > 0.7: normalized_RSD_balanced_cover = 0
+                else: normalized_RSD_balanced_cover = 1 - (RSD_balanced_cover / 0.7)
+
+                normalized_RSD_balanced_cover = max(0.0, min(1.0, normalized_RSD_balanced_cover))
+
+                # average_balanced_cover = calculate_balanced_cover(solution, LM_KNs_Covered, KS_names, total_covering_goals)
+                # if average_balanced_cover >= max_average_balanced_cover: normalized_average_balanced_cover = 0
+                # else: normalized_average_balanced_cover = 1 - (average_balanced_cover / max_average_balanced_cover)
+                #
+                # normalized_average_balanced_cover = max(0.0, min(1.0, normalized_average_balanced_cover))
 
                 average_coherence = (total_covering_non_goals / num_LMs)
 
@@ -689,19 +719,33 @@ for _ in range(num_iterations):
                 elif media_matching_average >= 0.25:
                     rubric_scores["media_matching"] = 2
 
-                if min_time <= total_duration <= max_time:
+                if min_time < total_duration < max_time:
                     rubric_scores["time_interval_score"] = 4
                 else:
                     if total_duration < min_time:
-                        if 0 < abs(total_duration - min_time) / min_time <= 0.1:
+                        if 0 < abs(total_duration - min_time) / min_time <= min_time_multiplier / 2:
                             rubric_scores["time_interval_score"] = 3
-                        elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2:
+                        elif 0.1 < abs(total_duration - min_time) / min_time <= min_time_multiplier:
                             rubric_scores["time_interval_score"] = 2
                     if total_duration > max_time:
-                        if 0 < abs(total_duration - max_time) / max_time <= 0.1:
+                        if 0 < abs(total_duration - max_time) / max_time <= max_time_multiplier / 2:
                             rubric_scores["time_interval_score"] = 3
-                        elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2:
+                        elif 0.1 < abs(total_duration - max_time) / max_time <= max_time_multiplier:
                             rubric_scores["time_interval_score"] = 2
+
+                # if min_time <= total_duration <= max_time:
+                #     rubric_scores["time_interval_score"] = 4
+                # else:
+                #     if total_duration < min_time:
+                #         if 0 < abs(total_duration - min_time) / min_time <= 0.1:
+                #             rubric_scores["time_interval_score"] = 3
+                #         elif 0.1 < abs(total_duration - min_time) / min_time <= 0.2:
+                #             rubric_scores["time_interval_score"] = 2
+                #     if total_duration > max_time:
+                #         if 0 < abs(total_duration - max_time) / max_time <= 0.1:
+                #             rubric_scores["time_interval_score"] = 3
+                #         elif 0.1 < abs(total_duration - max_time) / max_time <= 0.2:
+                #             rubric_scores["time_interval_score"] = 2
 
                 if average_coherence <= 0.25:
                     rubric_scores["coherence_principle"] = 4
@@ -724,11 +768,18 @@ for _ in range(num_iterations):
                 elif average_cohesiveness >= 0.25:
                     rubric_scores["cohesiveness"] = 2
 
-                if average_balanced_cover <= 1:
+                # if average_balanced_cover <= 1:
+                #     rubric_scores["balance"] = 4
+                # elif average_balanced_cover <= 2.9:
+                #     rubric_scores["balance"] = 3
+                # elif average_balanced_cover <= 4.9:
+                #     rubric_scores["balance"] = 2
+
+                if RSD_balanced_cover <= 0.3:
                     rubric_scores["balance"] = 4
-                elif average_balanced_cover <= 2.9:
+                elif RSD_balanced_cover <= 0.5:
                     rubric_scores["balance"] = 3
-                elif average_balanced_cover <= 4.9:
+                elif RSD_balanced_cover <= 0.7:
                     rubric_scores["balance"] = 2
 
                 if MDIP_average >= 4:
@@ -753,34 +804,35 @@ for _ in range(num_iterations):
                 if not all(kn_coverage.values()):
                     set_cover = 1 # Not a valid set cover or time constraints violated
 
+                #time_compliance = ((min_time_compliance + max_time_compliance) / 2) * 3 + 1
+                time_compliance = ((min_time_compliance + max_time_compliance) / 2)
+                LM_compliance_score = ((difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness + time_compliance) / 5) * 3 + 1
 
-                LM_compliance_score = ((difficulty_matching_average + CTML_average_normalized + media_matching_average + average_cohesiveness) / 4) * 3 + 1
+                KN_compliance_score = ((normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_RSD_balanced_cover) / 4) * 3 + 1
 
-                #KN_compliance_score = ((normalized_segmenting + normalized_MDIP + normalized_average_coherence + normalized_average_balanced_cover) / 4) * 3 + 1
-
-                time_compliance = ((min_time_compliance + max_time_compliance) / 2 ) * 3 + 1
+                #time_compliance = ((min_time_compliance + max_time_compliance) / 2 ) * 3 + 1
 
                 #Experiment with MDIP as a separate objective
-                KN_compliance_score = ((normalized_segmenting + normalized_average_coherence + normalized_average_balanced_cover) / 3) * 3 + 1
-                mdip_compliance = (normalized_MDIP * 3 )+ 1
+                #KN_compliance_score = ((normalized_segmenting + normalized_average_coherence + normalized_average_balanced_cover) / 3) * 3 + 1
+                #mdip_compliance = (normalized_MDIP * 3 )+ 1
 
                 #eturn [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance, set_cover]
 
 
-                return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score, time_compliance, mdip_compliance]
+                return [rubric_scores["Rubric Average"], LM_compliance_score, KN_compliance_score]
 
 
             gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
-            # Initial Exhaustive Search
-            # sol_per_pop = [50, 100]
-            # num_generations = [50, 100]
-            # parent_selection_type = ["nsga2", "tournament_nsga2"]
-            # mutation_type = ["swap", "random"]
-            # crossover_type = ["single_point", "two_points"]
-            # mutation_probability = [0.1, 0.3, 0.5]
-            # crossover_probability = [0.1, 0.3, 0.5]
-            # num_parents_mating = [10, 25]
+            #Initial Exhaustive Search
+            sol_per_pop = [50, 100]
+            num_generations = [50, 100]
+            parent_selection_type = ["nsga2", "tournament_nsga2"]
+            mutation_type = ["swap", "random"]
+            crossover_type = ["single_point", "two_points"]
+            mutation_probability = [0.1, 0.3, 0.5]
+            crossover_probability = [0.1, 0.3, 0.5]
+            num_parents_mating = [10, 25]
 
             # Second Exhaustive Search for specialized Initial Population
             # sol_per_pop = [50, 100, 150, 200, 250]
@@ -803,14 +855,14 @@ for _ in range(num_iterations):
             # num_parents_mating = [25]
 
             # quick run
-            sol_per_pop = [100]
-            num_generations = [100]
-            parent_selection_type = ["nsga2"]
-            mutation_type = ["swap"]
-            crossover_type = ["single_point"]
-            mutation_probability = [0.3]
-            crossover_probability = [0.5]
-            num_parents_mating = [10]
+            # sol_per_pop = [100]
+            # num_generations = [100]
+            # parent_selection_type = ["nsga2"]
+            # mutation_type = ["swap"]
+            # crossover_type = ["single_point"]
+            # mutation_probability = [0.3]
+            # crossover_probability = [0.5]
+            # num_parents_mating = [10]
 
             parameter_combinations = list(itertools.product(
                 sol_per_pop,
@@ -836,8 +888,14 @@ for _ in range(num_iterations):
             num_genes = len(LM_database)
 
             # Define Rubric Parameters that will be used in the GA Fitness Function
-            Rubric_max_time = math.ceil(max_time*1.2)
-            Rubric_min_time = math.floor(min_time * 0.8)
+            # time_threshold is the value we use to create the boundary conditions on the student's behavior
+            # time_threshold is between 0 and 1
+            time_threshold = 0.2
+            max_time_multiplier = 1 + time_threshold
+            min_time_multiplier = 1 - time_threshold
+
+            Rubric_max_time = math.ceil(max_time*max_time_multiplier)
+            Rubric_min_time = math.floor(min_time * min_time_multiplier)
             Rubric_max_coherence = 1.1
             max_average_balanced_cover = 5
             Rubric_max_MDIP = 4
@@ -856,7 +914,7 @@ for _ in range(num_iterations):
                                        initial_population=generate_valid_initial_population(pop_size, num_genes,
                                                                                             KS_names, LM_KNs_Covered,
                                                                                             lm_time_taken, Rubric_min_time,
-                                                                                            Rubric_max_time, 1000),
+                                                                                            Rubric_max_time, 10000),
                                        fitness_func=fitness_func,
                                        parent_selection_type=parent_type,
                                        mutation_type=mut_type,
@@ -906,9 +964,9 @@ for _ in range(num_iterations):
                     fitness_value = row_data[1][0]
                     LM_compliance_average = row_data[1][1]
                     KN_compliance_average = row_data[1][2]
-                    Time_interval_compliance = row_data[1][3]
+                    #Time_interval_compliance = row_data[1][3]
                     #set_cover = row_data[1][4]
-                    mdip = row_data[1][4]
+                    #mdip = row_data[1][4]
 
                     #print("Fitness value of best solution from pareto front is:", highest_fitness_value)
 
@@ -938,15 +996,32 @@ for _ in range(num_iterations):
                             total_CTML_score += lm_CTML_score[i]
                             total_time += lm_time_taken[i]
                             count += 1
+                    #
+                    # balanced_cover_total = 0
+                    # for kn in KS_names:
+                    #     num_coverings = 0
+                    #     for i in range(len(solution)):
+                    #         if solution[i] == 1:
+                    #             if kn in LM_KNs_Covered[i]: num_coverings += 1
+                    #     balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
+                    # balanced_average = balanced_cover_total / len(KS_names)
 
-                    balanced_cover_total = 0
+                    # Calculate the mean Topic Balance
+                    topic_balance_mean = total_covering_goals / len(KS_names)
+
+                    # Calculate the topic balance standard deviation
+                    covering_numbers = []
+                    topic_balance_standard_deviation = 0
                     for kn in KS_names:
                         num_coverings = 0
                         for i in range(len(solution)):
                             if solution[i] == 1:
                                 if kn in LM_KNs_Covered[i]: num_coverings += 1
-                        balanced_cover_total += abs(num_coverings - total_covering_goals / len(KS_names))
-                    balanced_average = balanced_cover_total / len(KS_names)
+                        topic_balance_standard_deviation += (num_coverings - topic_balance_mean) ** 2
+                        covering_numbers.append(num_coverings)
+
+                    topic_balance_standard_deviation = (topic_balance_standard_deviation / len(KS_names)) ** (1/2)
+                    RSD_balanced_cover = topic_balance_standard_deviation / topic_balance_mean
 
                     average_difficulty_matching_score = total_difficulty_score / count if count > 0 else 0
                     average_media_preference_score = total_media_score / count if count > 0 else 0
@@ -989,14 +1064,14 @@ for _ in range(num_iterations):
                         "Total number of LMs": num_included_LMs,
                         "LM Compliance": LM_compliance_average,
                         "KN Compliance": KN_compliance_average,
-                        "Time Interval Compliance": Time_interval_compliance,
+                        #"Time Interval Compliance": Time_interval_compliance,
                         #"Set Cover Compliance": set_cover, reset this to restore state
-                        "MDIP Compliance": mdip,
+                        #"MDIP Compliance": mdip,
                         "Difficulty Average": average_difficulty_matching_score,
                         "Media Matching Average": average_media_preference_score,
                         "CTML Average": average_CTML_score,
                         "Cohesiveness Average": average_cohesiveness,
-                        "Balance Average": balanced_average,
+                        "Balance Relative Standard Deviation": RSD_balanced_cover,
                         "PLP Duration": total_time,
                         "Coherence Average": average_coherence,
                         "Segmenting Average": average_segmenting_principle,
@@ -1036,19 +1111,33 @@ for _ in range(num_iterations):
                         rubric_scores["media_matching"] = 3
                     elif average_media_preference_score >= 0.25:
                         rubric_scores["media_matching"] = 2
+                    #
+                    # if min_time < total_time < max_time:
+                    #     rubric_scores["time_interval_score"] = 4
+                    # else:
+                    #     if total_time < min_time:
+                    #         if 0 < abs(total_time - min_time) / min_time <= 0.1:
+                    #             rubric_scores["time_interval_score"] = 3
+                    #         elif 0.1 < abs(total_time - min_time) / min_time <= 0.2:
+                    #             rubric_scores["time_interval_score"] = 2
+                    #     if total_time > max_time:
+                    #         if 0 < abs(total_time - max_time) / max_time <= 0.1:
+                    #             rubric_scores["time_interval_score"] = 3
+                    #         elif 0.1 < abs(total_time - max_time) / max_time <= 0.2:
+                    #             rubric_scores["time_interval_score"] = 2
 
                     if min_time < total_time < max_time:
                         rubric_scores["time_interval_score"] = 4
                     else:
                         if total_time < min_time:
-                            if 0 < abs(total_time - min_time) / min_time <= 0.1:
+                            if 0 < abs(total_time - min_time) / min_time <= min_time_multiplier /2:
                                 rubric_scores["time_interval_score"] = 3
-                            elif 0.1 < abs(total_time - min_time) / min_time <= 0.2:
+                            elif 0.1 < abs(total_time - min_time) / min_time <= min_time_multiplier:
                                 rubric_scores["time_interval_score"] = 2
                         if total_time > max_time:
-                            if 0 < abs(total_time - max_time) / max_time <= 0.1:
+                            if 0 < abs(total_time - max_time) / max_time <= max_time_multiplier / 2:
                                 rubric_scores["time_interval_score"] = 3
-                            elif 0.1 < abs(total_time - max_time) / max_time <= 0.2:
+                            elif 0.1 < abs(total_time - max_time) / max_time <= max_time_multiplier:
                                 rubric_scores["time_interval_score"] = 2
 
                     if average_coherence <= 0.25:
@@ -1072,12 +1161,19 @@ for _ in range(num_iterations):
                     elif average_cohesiveness >= 0.25:
                         rubric_scores["cohesiveness"] = 2
 
-                    if balanced_average <= 1:
+                    if RSD_balanced_cover <= 0.3:
                         rubric_scores["balance"] = 4
-                    elif balanced_average <= 2.9:
+                    elif RSD_balanced_cover <= 0.5:
                         rubric_scores["balance"] = 3
-                    elif balanced_average <= 4.9:
+                    elif RSD_balanced_cover <= 0.7:
                         rubric_scores["balance"] = 2
+
+                    # if balanced_average <= 1:
+                    #     rubric_scores["balance"] = 4
+                    # elif balanced_average <= 2.9:
+                    #     rubric_scores["balance"] = 3
+                    # elif balanced_average <= 4.9:
+                    #     rubric_scores["balance"] = 2
 
                     if multiple_document_principle_average >= 4:
                         rubric_scores["MDIP"] = 4
@@ -1094,7 +1190,7 @@ for _ in range(num_iterations):
                     experiment_df = pd.concat([experiment_df, combined_data_df], ignore_index=True)
 
 
-Experiment = "Experiment_Results/LM_Selection_30_iterations_with_MDIP.csv"
+Experiment = "Experiment_Results/LM_Selection_Parameter_Sweep.csv"
 experiment_df.to_csv(Experiment)
 print("Finished Test")
 
