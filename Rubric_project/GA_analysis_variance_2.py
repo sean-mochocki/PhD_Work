@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import re
 
-plp_solutions = "Experiment_Results/LM_Selection_30_iterations_pareto_front.csv"
+plp_solutions = "Experiment_Results/LM_Selection_Parameter_30_iteration.csv"
 plp_set = pd.read_csv(plp_solutions)
 
 categories = [
@@ -41,7 +41,7 @@ student_variances.to_csv(variance_csv_file, index = False)
 # Calculate the mean of the category averages for each student
 student_category_means = student_iteration_means.groupby('Student_id')[categories].mean().reset_index()
 
-means_csv_file = "Experiment_Results/student_means.csv"
+means_csv_file = "Experiment_Results/30_iterations_student_means.csv"
 student_category_means.to_csv(means_csv_file, index = False)
 
 # If you want this in a long format for further analysis or CSV export:

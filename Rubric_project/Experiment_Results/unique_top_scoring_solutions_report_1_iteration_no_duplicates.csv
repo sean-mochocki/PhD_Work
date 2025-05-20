@@ -1,0 +1,13 @@
+Student_id,Unique_Solution_ID,LM_Difficulty_Matching,CTML_Principle,media_matching,time_interval_score,coherence_principle,segmenting_principle,balance,cohesiveness,MDIP,Rubric Average,Unique_PLP_Count,Total_Iterations_Appears,Times_Top_Scoring,Iterations_Appeared_In
+0,0,3,3,3,4,2,4,4,3,3,3.33,3,1,3,[1]
+1,0,3,3,3,4,2,4,3,3,4,3.33,3,1,3,[1]
+2,0,3,4,3,1,2,4,3,3,4,3.11,2,1,2,[1]
+3,0,3,3,3,1,3,4,3,3,4,3.11,5,1,6,[1]
+4,0,3,4,4,1,2,4,3,3,4,3.22,3,1,6,[1]
+5,0,3,4,3,1,2,4,3,3,3,3.00,6,1,9,[1]
+6,0,3,3,3,1,2,4,3,3,4,3.00,2,1,4,[1]
+7,0,2,3,3,1,3,4,3,3,3,2.89,4,1,4,[1]
+8,0,3,4,3,1,2,4,3,3,3,3.00,2,1,5,[1]
+9,0,3,4,4,1,2,4,4,3,3,3.22,4,1,9,[1]
+10,0,4,4,3,1,2,4,4,3,4,3.33,3,1,6,[1]
+11,0,3,3,3,1,2,4,3,3,4,3.00,2,1,3,[1]

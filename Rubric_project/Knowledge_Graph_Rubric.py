@@ -138,7 +138,7 @@ profile_database = pd.read_excel(learner_profile)
 profile_database['goals'] = profile_database['goals'].apply(lambda x: ast.literal_eval(x) if x != '[]' else [])
 
 experiment_df = pd.DataFrame()
-num_iterations = 1
+num_iterations = 30
 for _ in range(num_iterations):
     print("Iteration number: ", _, "of", num_iterations)
     for student_profile_id in range(len(profile_database)):
@@ -825,14 +825,15 @@ for _ in range(num_iterations):
             gene_space = {'low': 0, 'high': 1}  # Each gene is either 0 or 1
 
             #Initial Exhaustive Search
-            sol_per_pop = [50, 100]
-            num_generations = [50, 100]
-            parent_selection_type = ["nsga2", "tournament_nsga2"]
-            mutation_type = ["swap", "random"]
-            crossover_type = ["single_point", "two_points"]
-            mutation_probability = [0.1, 0.3, 0.5]
-            crossover_probability = [0.1, 0.3, 0.5]
-            num_parents_mating = [10, 25]
+            sol_per_pop = [100]
+            num_generations = [500]
+            parent_selection_type = ["nsga2"]
+            mutation_type = ["swap"]
+            crossover_type = ["single_point"]
+            mutation_probability = [1/len(LM_database)] # 1/n chromosome length
+            crossover_probability = [0.84] #Vary between 0.8 and 0.95 in 0.01 increments
+            #crossover_probability = np.arange(0.8, 0.95 + 0.001, 0.01).tolist()
+            num_parents_mating = [10]
 
             # Second Exhaustive Search for specialized Initial Population
             # sol_per_pop = [50, 100, 150, 200, 250]
@@ -1190,7 +1191,7 @@ for _ in range(num_iterations):
                     experiment_df = pd.concat([experiment_df, combined_data_df], ignore_index=True)
 
 
-Experiment = "Experiment_Results/LM_Selection_Parameter_Sweep.csv"
+Experiment = "Experiment_Results/LM_Selection_Parameter_30_iteration.csv"
 experiment_df.to_csv(Experiment)
 print("Finished Test")
 
